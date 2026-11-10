@@ -1,21 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2A2624"/>
-      <stop offset="1" stop-color="#1C1917"/>
-    </linearGradient>
-  </defs>
-  <rect width="1024" height="1024" fill="url(#bg)"/>
-  <!-- progress ring -->
-  <circle cx="512" cy="512" r="330" fill="none" stroke="#3A3532" stroke-width="44"/>
-  <circle cx="512" cy="512" r="330" fill="none" stroke="#9AAB93" stroke-width="44"
-          stroke-linecap="round" stroke-dasharray="1555 2074" transform="rotate(-90 512 512)"/>
-  <!-- dumbbell -->
-  <g transform="rotate(-30 512 512)" fill="#F5F5F4">
-    <rect x="352" y="490" width="320" height="44" rx="22"/>
-    <rect x="300" y="392" width="72" height="240" rx="30"/>
-    <rect x="238" y="430" width="56" height="164" rx="24"/>
-    <rect x="652" y="392" width="72" height="240" rx="30"/>
-    <rect x="730" y="430" width="56" height="164" rx="24"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
+<rect width="1024" height="1024" fill="#E7E5E4"/>
+<g transform="translate(512 512) scale(1.25) rotate(-30) translate(-512 -512)">
+<rect x="352" y="490" width="320" height="44" rx="22" fill="#1C1917"/>
+<rect x="300" y="392" width="72" height="240" rx="30" fill="#44403C"/>
+<rect x="238" y="430" width="56" height="164" rx="24" fill="#78716C"/>
+<rect x="652" y="392" width="72" height="240" rx="30" fill="#44403C"/>
+<rect x="730" y="430" width="56" height="164" rx="24" fill="#78716C"/>
+</g>
 </svg>
