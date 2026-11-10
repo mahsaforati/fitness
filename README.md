@@ -1,4 +1,4 @@
-# WorkoutTracker
+# Fitness
 
 iOS app (SwiftUI + SwiftData) for logging weights and reps against a 6-month home dumbbell plan.
 
@@ -13,9 +13,9 @@ Option A — XcodeGen (recommended):
 ```
 brew install xcodegen
 xcodegen generate
-open WorkoutTracker.xcodeproj
+open Fitness.xcodeproj
 ```
-Option B — in Xcode create a new iOS App called `WorkoutTracker` (SwiftUI, SwiftData), delete the generated Swift files and drag in the `WorkoutTracker/` folder.
+Option B — in Xcode create a new iOS App called `Fitness` (SwiftUI, SwiftData), delete the generated Swift files and drag in the `Fitness/` folder.
 
 Requires iOS 17+.
 

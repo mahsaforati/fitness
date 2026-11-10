@@ -1,16 +1,16 @@
-name: WorkoutTracker
+name: Fitness
 options:
   bundleIdPrefix: com.mahsaforati
   deploymentTarget:
     iOS: "17.0"
 targets:
-  WorkoutTracker:
+  Fitness:
     type: application
     platform: iOS
-    sources: [WorkoutTracker]
+    sources: [Fitness]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mahsaforati.WorkoutTracker
+        PRODUCT_BUNDLE_IDENTIFIER: com.mahsaforati.Fitness
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         SWIFT_VERSION: "5.0"
