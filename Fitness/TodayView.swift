@@ -43,12 +43,8 @@ struct ExerciseLogView: View {
 
     var body: some View {
         Form {
-            if !exercise.howTo.isEmpty {
-                Section("How to") {
-                    ForEach(Array(exercise.howTo.enumerated()), id: \.offset) { i, step in
-                        Text("\(i + 1). \(step)")
-                    }
-                }
+            if let info = ExerciseLibrary.info(for: exercise.id) {
+                Section { HowToCarousel(info: info) }
             }
             Section("Sets (\(units.label))") {
                 ForEach(0..<exercise.sets, id: \.self) { i in

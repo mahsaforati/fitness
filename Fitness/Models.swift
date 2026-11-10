@@ -14,7 +14,6 @@ struct ExerciseTemplate: Identifiable, Hashable {
     let name: String
     let sets: Int
     let reps: String
-    let howTo: [String]
 }
 
 struct WorkoutTemplate: Identifiable {
