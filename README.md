@@ -6,7 +6,7 @@ iOS app (SwiftUI + SwiftData) for logging weights and reps against a 6-month hom
 - Four tabs: **Today** (home), Calendar, Progress, Plan
 - Phase 1 of the plan built in as a template (Workouts A / B / C)
 - Log weight × reps per set; weights stored in kg, shown in **lb by default** with an lb/kg switch
-- Every Phase 1 exercise has a swipeable how-to card: short steps + "avoid" tip, then a looping animation with worked muscles highlighted
+- Every Phase 1 exercise shows short how-to steps and what to avoid
 
 ## Run it
 Option A — XcodeGen (recommended):
@@ -22,4 +22,4 @@ Requires iOS 17+.
 ## Next
 - Calendar view and weekly/monthly Progress charts
 - Excel (.xlsx) plan import
-- Realistic female-figure animations with muscle highlighting (replace the placeholder stick figure)
+- Exercise demo videos (on hold)
