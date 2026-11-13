@@ -29,12 +29,38 @@ enum PlanTemplate {
         ])
     ]
 
+    static func workout(id: String) -> WorkoutTemplate? {
+        phase1.first { $0.id == id }
+    }
+
     // Mon/Tue = A, Wed/Thu = B, Fri–Sun = C.
-    static func workout(for date: Date) -> WorkoutTemplate {
+    static func scheduledWorkout(for date: Date) -> WorkoutTemplate {
         switch Calendar.current.component(.weekday, from: date) {
         case 2, 3: return phase1[0]
         case 4, 5: return phase1[1]
         default:   return phase1[2]
         }
+    }
+
+    // MARK: Swap today's workout
+    // The choice is saved with the day it was made ("2026-11-13|B"),
+    // so it applies only to that day and the schedule resumes tomorrow.
+
+    static let overrideKey = "workoutOverride"
+
+    static func dayKey(_ date: Date) -> String {
+        let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+    }
+
+    static func overrideID(from stored: String, on date: Date) -> String? {
+        let parts = stored.split(separator: "|").map(String.init)
+        guard parts.count == 2, parts[0] == dayKey(date) else { return nil }
+        return parts[1]
+    }
+
+    static func workout(for date: Date, override stored: String) -> WorkoutTemplate {
+        if let id = overrideID(from: stored, on: date), let w = workout(id: id) { return w }
+        return scheduledWorkout(for: date)
     }
 }
