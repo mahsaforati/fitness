@@ -82,22 +82,7 @@ struct ExerciseLogView: View {
     var body: some View {
         Form {
             if let info = ExerciseLibrary.info(for: exercise.id) {
-                Section("How to") {
-                    ForEach(Array(info.steps.enumerated()), id: \.offset) { i, step in
-                        HStack(alignment: .top, spacing: 10) {
-                            Text("\(i + 1)")
-                                .font(.caption.bold())
-                                .frame(width: 22, height: 22)
-                                .background(Circle().fill(Color(.systemGray5)))
-                            Text(step).font(.subheadline)
-                        }
-                    }
-                }
-                Section("Avoid") {
-                    Text(info.avoid)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Section { HowToCarousel(info: info) }
             }
             Section("Sets (\(units.label))") {
                 ForEach(0..<exercise.sets, id: \.self) { i in
