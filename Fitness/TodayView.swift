@@ -4,15 +4,53 @@ import SwiftData
 struct TodayView: View {
     @AppStorage("units") private var unitsRaw = UnitSystem.imperial.rawValue
     private var units: UnitSystem { UnitSystem(rawValue: unitsRaw) ?? .imperial }
-    private let workout = PlanTemplate.workout(for: .now)
+    @AppStorage(PlanTemplate.overrideKey) private var overrideRaw = ""
+
+    private var today: Date { .now }
+    private var scheduled: WorkoutTemplate { PlanTemplate.scheduledWorkout(for: today) }
+    private var workout: WorkoutTemplate { PlanTemplate.workout(for: today, override: overrideRaw) }
+    private var isSwapped: Bool { workout.id != scheduled.id }
+
+    // Picking the scheduled workout clears the override.
+    private var selectedID: Binding<String> {
+        Binding(
+            get: { workout.id },
+            set: { id in
+                overrideRaw = id == scheduled.id ? "" : "\(PlanTemplate.dayKey(today))|\(id)"
+            }
+        )
+    }
 
     var body: some View {
         NavigationStack {
-            List(workout.exercises) { ex in
-                NavigationLink(value: ex) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(ex.name).font(.headline)
-                        Text("\(ex.sets) × \(ex.reps)").font(.subheadline).foregroundStyle(.secondary)
+            List {
+                Section {
+                    Picker("Today's workout", selection: selectedID) {
+                        ForEach(PlanTemplate.phase1) { Text($0.id).tag($0.id) }
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                } footer: {
+                    if isSwapped {
+                        HStack {
+                            Text("Swapped for today · scheduled was \(scheduled.id)")
+                            Spacer()
+                            Button("Undo") { overrideRaw = "" }.font(.footnote.bold())
+                        }
+                    } else {
+                        Text("Scheduled for today · tap A, B or C to swap")
+                    }
+                }
+
+                Section {
+                    ForEach(workout.exercises) { ex in
+                        NavigationLink(value: ex) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(ex.name).font(.headline)
+                                Text("\(ex.sets) × \(ex.reps)").font(.subheadline).foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
@@ -44,22 +82,7 @@ struct ExerciseLogView: View {
     var body: some View {
         Form {
             if let info = ExerciseLibrary.info(for: exercise.id) {
-                Section("How to") {
-                    ForEach(Array(info.steps.enumerated()), id: \.offset) { i, step in
-                        HStack(alignment: .top, spacing: 10) {
-                            Text("\(i + 1)")
-                                .font(.caption.bold())
-                                .frame(width: 22, height: 22)
-                                .background(Circle().fill(Color(.systemGray5)))
-                            Text(step).font(.subheadline)
-                        }
-                    }
-                }
-                Section("Avoid") {
-                    Text(info.avoid)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Section { HowToCarousel(info: info) }
             }
             Section("Sets (\(units.label))") {
                 ForEach(0..<exercise.sets, id: \.self) { i in
