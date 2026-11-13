@@ -123,39 +123,54 @@ struct ExerciseAnimationView: View {
 /// Swipeable card: page 1 = steps, page 2 = animation.
 struct HowToCarousel: View {
     let info: ExerciseInfo
+    @State private var page = 0
+    private let pageCount = 2
 
     var body: some View {
-        TabView {
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(Array(info.steps.enumerated()), id: \.offset) { i, step in
-                    HStack(alignment: .top, spacing: 10) {
-                        Text("\(i + 1)")
-                            .font(.caption.bold())
-                            .frame(width: 22, height: 22)
-                            .background(Circle().fill(Color(.systemGray5)))
-                        Text(step).font(.subheadline)
+        VStack(spacing: 10) {
+            TabView(selection: $page) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(info.steps.enumerated()), id: \.offset) { i, step in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text("\(i + 1)")
+                                .font(.caption.bold())
+                                .frame(width: 22, height: 22)
+                                .background(Circle().fill(Color(.systemGray5)))
+                            Text(step).font(.subheadline)
+                        }
                     }
+                    Text("Avoid: \(info.avoid)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                    Spacer(minLength: 0)
+                    Text("Swipe for animation →").font(.caption).foregroundStyle(.secondary)
                 }
-                Text("Avoid: \(info.avoid)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-                Spacer(minLength: 0)
-                Text("Swipe for animation →").font(.caption).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .tag(0)
 
-            VStack(spacing: 6) {
-                ExerciseAnimationView(info: info)
-                Text("Works: " + info.muscles.joined(separator: " · "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 6) {
+                    ExerciseAnimationView(info: info)
+                    Text("Works: " + info.muscles.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .tag(1)
             }
-            .padding(.bottom, 28)
+            // System dots float over the content, so hide them and draw our own below.
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 312)
+
+            HStack(spacing: 8) {
+                ForEach(0..<pageCount, id: \.self) { i in
+                    Circle()
+                        .fill(i == page ? Color.primary : Color(.systemGray4))
+                        .frame(width: 7, height: 7)
+                        .onTapGesture { withAnimation { page = i } }
+                }
+            }
+            .accessibilityElement()
+            .accessibilityLabel("Page \(page + 1) of \(pageCount)")
         }
-        .tabViewStyle(.page)
-        .indexViewStyle(.page(backgroundDisplayMode: .always))
-        .frame(height: 340)
     }
 }
