@@ -62,16 +62,8 @@ struct TodayView: View {
                 }
 
                 Section {
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            ProgressView(value: Double(doneCount), total: Double(max(states.count, 1)))
-                                .tint(Tone.ink)
-                            Text("\(doneCount) of \(states.count) exercises done")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                        WorkoutTimer()
-                    }
-                    .listRowBackground(Color.clear)
+                    WorkoutHeader(done: doneCount, total: states.count)
+                        .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                 }
 
@@ -794,62 +786,140 @@ struct CatalogDetailView: View {
     }
 }
 
-// MARK: - Workout timer (next to the progress bar)
-// Start / Stop works like a stopwatch: Stop pauses, Start carries on from there.
-// It's saved, so it keeps running if you leave the app, and it starts from 0:00 on a new day.
-// Long-press to reset.
+// MARK: - Workout header: Start button, then progress bar + timer
+// Before you start: one big "Start workout" button, no progress bar.
+// Once started: a thick bar shows "2 of 6" and the time, with Pause/Resume and Stop beside it.
+// Stop asks first, then freezes the bar at your finishing time. Long-press the bar to start over.
+// The timer is saved, so it keeps going if you leave the app, and everything resets on a new day.
 
-private struct WorkoutTimer: View {
-    @AppStorage("workoutTimerStart") private var startedAt = 0.0   // when it was last started; 0 = stopped
-    @AppStorage("workoutTimerElapsed") private var elapsed = 0.0   // seconds banked before the last start
-    @AppStorage("workoutTimerDay") private var day = ""            // day the timer belongs to
+private struct WorkoutHeader: View {
+    let done: Int
+    let total: Int
+
+    @AppStorage("workoutTimerStart") private var startedAt = 0.0      // when it was last started; 0 = not running
+    @AppStorage("workoutTimerElapsed") private var elapsed = 0.0      // seconds banked before the last start
+    @AppStorage("workoutTimerDay") private var day = ""               // day the timer belongs to
+    @AppStorage("workoutTimerStarted") private var started = false    // pressed Start today
+    @AppStorage("workoutTimerFinished") private var finished = false  // pressed Stop today
+    @State private var confirmingStop = false
 
     private var running: Bool { startedAt > 0 }
 
+    private static let sage     = Color(red: 0.478, green: 0.545, blue: 0.455) // #7A8B74
+    private static let sageFill = Color(red: 0.788, green: 0.820, blue: 0.773) // #C9D1C5
+    private static let track    = Color(red: 0.906, green: 0.898, blue: 0.894) // #E7E5E4
+    private static let stone    = Color(red: 0.267, green: 0.251, blue: 0.235) // #44403C
+
     var body: some View {
-        HStack(spacing: 8) {
-            TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                Text(format(total(at: ctx.date)))
-                    .font(.subheadline.weight(.semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(running ? Tone.ink : Color.secondary)
+        Group {
+            if started || running || elapsed > 0 {   // also covers a timer started before this update
+                HStack(spacing: 8) {
+                    bar
+                    if !finished {
+                        circleButton(running ? "pause.fill" : "play.fill",
+                                     label: running ? "Pause workout timer" : "Resume workout timer",
+                                     action: togglePause)
+                        circleButton("stop.fill", label: "Stop workout") { confirmingStop = true }
+                    }
+                }
+            } else {
+                Button(action: start) {
+                    Label("Start workout", systemImage: "play.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(Capsule().fill(Self.sage))
+                }
+                .buttonStyle(.borderless)
             }
-            Button(action: toggle) {
-                Image(systemName: running ? "stop.fill" : "play.fill")
-                    .font(.footnote)
-                    .foregroundStyle(running ? Color.white : Tone.ink)
-                    .frame(width: 32, height: 32)
-                    .background(Circle().fill(running ? Tone.ink : Color(.systemGray5)))
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(running ? "Stop workout timer" : "Start workout timer")
-        }
-        .contextMenu {
-            Button("Reset timer", systemImage: "arrow.counterclockwise") { reset() }
         }
         .onAppear(perform: newDayCheck)
+        .confirmationDialog("End this workout?", isPresented: $confirmingStop, titleVisibility: .visible) {
+            Button("End workout", role: .destructive, action: stop)
+        } message: {
+            Text("The timer stops at its current time. Your logged sets stay as they are.")
+        }
     }
 
-    private func total(at date: Date) -> TimeInterval {
+    // Thick bar: progress fill, "2 of 6" on the left, the time on the right.
+    private var bar: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Self.track)
+                GeometryReader { geo in
+                    Capsule().fill(Self.sageFill)
+                        .frame(width: total > 0 && done > 0
+                               ? max(34, geo.size.width * CGFloat(done) / CGFloat(total)) : 0)
+                }
+                HStack {
+                    Text(finished ? "Finished · \(done) of \(total)"
+                         : running ? "\(done) of \(total)" : "Paused · \(done) of \(total)")
+                        .foregroundStyle(Self.stone)
+                    Spacer()
+                    Text(format(totalTime(at: ctx.date)))
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                        .foregroundStyle(running || finished ? Tone.ink : Color.secondary)
+                }
+                .font(.subheadline)
+                .padding(.horizontal, 14)
+            }
+            .frame(height: 36)
+            .animation(.easeOut(duration: 0.3), value: done)
+        }
+        .contentShape(Capsule())
+        .contextMenu {
+            Button("Start over", systemImage: "arrow.counterclockwise", role: .destructive, action: reset)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func circleButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.footnote)
+                .foregroundStyle(Tone.ink)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Self.track))
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(label)
+    }
+
+    private func totalTime(at date: Date) -> TimeInterval {
         elapsed + (running ? max(0, date.timeIntervalSince1970 - startedAt) : 0)
     }
 
-    private func toggle() {
+    private func start() {
         newDayCheck()
+        withAnimation(.easeOut(duration: 0.25)) { started = true }
+        finished = false
+        startedAt = Date.now.timeIntervalSince1970
+    }
+
+    private func togglePause() {
         if running {
-            elapsed = total(at: .now)
+            elapsed = totalTime(at: .now)
             startedAt = 0
         } else {
             startedAt = Date.now.timeIntervalSince1970
         }
     }
 
+    private func stop() {
+        elapsed = totalTime(at: .now)
+        startedAt = 0
+        finished = true
+    }
+
     private func reset() {
         startedAt = 0
         elapsed = 0
+        finished = false
+        withAnimation(.easeOut(duration: 0.25)) { started = false }
     }
 
-    // A timer left over from another day starts again from zero.
+    // A timer left over from another day starts again from the Start button.
     private func newDayCheck() {
         let today = PlanTemplate.dayKey(.now)
         if day != today {
