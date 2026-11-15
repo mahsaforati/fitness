@@ -94,12 +94,9 @@ struct TodayView: View {
                         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                         .listRowSeparator(.hidden)
                     // Same section as the title so there's only a small gap between them.
-                    WorkoutHeader(done: doneCount, total: states.count,
-                                  workoutName: workout.title.components(separatedBy: " · ")[0],
-                                  onAnother: { showingWorkouts = true },
-                                  onRestart: restartWorkout)
+                    WorkoutHeader(done: doneCount, total: states.count)
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 10, leading: 4, bottom: 0, trailing: 4))
+                        .listRowInsets(EdgeInsets(top: 16, leading: 4, bottom: 0, trailing: 4))
                         .listRowSeparator(.hidden)
                 }
 
@@ -531,16 +528,6 @@ struct TodayView: View {
         if s.logged.isEmpty { removeExercise(s.ex) } else { pendingRemoval = s.ex }
     }
 
-    // Restart: clear today's sets for this workout and go back to the Start button.
-    private func restartWorkout() {
-        withAnimation {
-            for ex in workout.exercises { deleteTodaysLogs(of: ex.id) }
-            extraSets = [:]
-            expandedID = nil
-        }
-        resetTimer()
-    }
-
     private func resetTimer() {
         timerStartedAt = 0
         timerElapsed = 0
@@ -853,9 +840,6 @@ struct CatalogDetailView: View {
 private struct WorkoutHeader: View {
     let done: Int
     let total: Int
-    let workoutName: String
-    let onAnother: () -> Void   // opens Your workouts
-    let onRestart: () -> Void   // clears today's sets for this workout and resets the timer
 
     @AppStorage("workoutTimerStart") private var startedAt = 0.0      // when it was last started; 0 = not running
     @AppStorage("workoutTimerElapsed") private var elapsed = 0.0      // seconds banked before the last start
@@ -863,7 +847,6 @@ private struct WorkoutHeader: View {
     @AppStorage("workoutTimerStarted") private var started = false    // pressed Start today
     @AppStorage("workoutTimerFinished") private var finished = false  // pressed Stop today
     @State private var confirmingStop = false
-    @State private var confirmingRestart = false
 
     private var running: Bool { startedAt > 0 }
 
@@ -885,14 +868,7 @@ private struct WorkoutHeader: View {
                     circleButton("stop.fill", label: "Stop workout") { confirmingStop = true }
                 }
             } else {
-                Button(action: start) {
-                    Label("Start workout", systemImage: "play.fill")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Capsule().fill(Self.sage))
-                }
-                .buttonStyle(.borderless)
+                startButton
             }
         }
         .onAppear(perform: newDayCheck)
@@ -901,39 +877,29 @@ private struct WorkoutHeader: View {
         } message: {
             Text("The timer stops at its current time. Your logged sets stay as they are.")
         }
-        .confirmationDialog("Restart \(workoutName)?", isPresented: $confirmingRestart, titleVisibility: .visible) {
-            Button("Restart", role: .destructive, action: onRestart)
-        } message: {
-            Text("Today's sets for \(workoutName) will be cleared so you can log them again.")
-        }
     }
 
-    // After Stop: "✓ Done in 42:10 · 6 of 6", then "Start another workout" and a restart button.
+    // After Stop: the Start button comes back, with "✓ Done in 42:10 · 6 of 6" underneath.
+    // Starting again begins a fresh timer; logged sets stay as they are.
     private var finishedView: some View {
         VStack(alignment: .leading, spacing: 8) {
+            startButton
             Label("Done in \(format(elapsed)) · \(done) of \(total)", systemImage: "checkmark")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Tone.check)
-            HStack(spacing: 8) {
-                Button(action: onAnother) {
-                    Label("Start another workout", systemImage: "play.fill")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Capsule().fill(Self.sage))
-                }
-                .buttonStyle(.borderless)
-                Button { confirmingRestart = true } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(Tone.ink)
-                        .frame(width: 48, height: 48)
-                        .background(Circle().fill(Self.track))
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Restart \(workoutName)")
-            }
+                .padding(.leading, 4)
         }
+    }
+
+    private var startButton: some View {
+        Button(action: start) {
+            Label("Start workout", systemImage: "play.fill")
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .background(Capsule().fill(Self.sage))
+        }
+        .buttonStyle(.borderless)
     }
 
     // Thick bar: progress fill, "2 of 6" on the left, the time on the right.
@@ -988,6 +954,7 @@ private struct WorkoutHeader: View {
     private func start() {
         newDayCheck()
         withAnimation(.easeOut(duration: 0.25)) { started = true }
+        if finished { elapsed = 0 }   // starting again after finishing: fresh timer
         finished = false
         startedAt = Date.now.timeIntervalSince1970
     }
