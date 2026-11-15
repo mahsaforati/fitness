@@ -62,10 +62,6 @@ struct TodayView: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Your workouts")
             }
-            if planned.id != scheduled.id {
-                Text("Swapped for today · scheduled was Workout \(scheduled.id)")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
         }
         .padding(.top, 8)
     }
@@ -82,12 +78,11 @@ struct TodayView: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                         .listRowSeparator(.hidden)
-                }
-
-                Section {
+                    // Same section as the title so there's only a small gap between them.
                     WorkoutHeader(done: doneCount, total: states.count)
                         .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                        .listRowInsets(EdgeInsets(top: 10, leading: 4, bottom: 0, trailing: 4))
+                        .listRowSeparator(.hidden)
                 }
 
                 ForEach(blocks(states)) { b in
