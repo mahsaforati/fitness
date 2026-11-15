@@ -15,8 +15,8 @@ enum PlanTemplate {
             .init(id: "db-bench", name: "Dumbbell bench press", sets: 3, reps: "10–12"),
             .init(id: "one-arm-row", name: "One-arm dumbbell row", sets: 3, reps: "10–12 / side"),
             .init(id: "seated-press", name: "Seated shoulder press", sets: 3, reps: "10"),
-            .init(id: "rear-delt-fly", name: "Rear-delt fly", sets: 3, reps: "12–15"),
-            .init(id: "push-up", name: "Push-ups", sets: 2, reps: "RIR 2"),
+            .init(id: "rear-delt-fly", name: "Rear-delt fly", sets: 3, reps: "12–15", superset: "B1"),
+            .init(id: "push-up", name: "Push-ups", sets: 2, reps: "RIR 2", superset: "B1"),
             .init(id: "plank", name: "Plank", sets: 3, reps: "30–40 s")
         ]),
         WorkoutTemplate(id: "C", title: "Workout C · Full body", exercises: [
@@ -28,6 +28,12 @@ enum PlanTemplate {
             .init(id: "side-plank", name: "Side plank", sets: 3, reps: "20–30 s / side")
         ])
     ]
+
+    // The other exercises in the same superset as `ex` (in plan order, including `ex`).
+    static func supersetGroup(of ex: ExerciseTemplate, in workout: WorkoutTemplate) -> [ExerciseTemplate] {
+        guard let tag = ex.superset else { return [ex] }
+        return workout.exercises.filter { $0.superset == tag }
+    }
 
     static func workout(id: String) -> WorkoutTemplate? {
         phase1.first { $0.id == id }

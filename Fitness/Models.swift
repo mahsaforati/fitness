@@ -14,6 +14,9 @@ struct ExerciseTemplate: Identifiable, Hashable {
     let name: String
     let sets: Int
     let reps: String
+    // Exercises next to each other with the same superset tag are done as a superset:
+    // one set of each in turn, then rest. nil = a normal straight-sets exercise.
+    var superset: String? = nil
 }
 
 struct WorkoutTemplate: Identifiable {

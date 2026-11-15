@@ -75,14 +75,8 @@ struct TodayView: View {
                     .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                 }
 
-                Section {
-                    ForEach(states, id: \.ex.id) { s in
-                        if s.ex.id == openID {
-                            expandedRows(s)
-                        } else {
-                            collapsedRow(s)
-                        }
-                    }
+                ForEach(blocks(states)) { b in
+                    blockSection(b, openID: openID)
                 }
             }
             .navigationTitle(workout.title)
@@ -117,9 +111,69 @@ struct TodayView: View {
         }
     }
 
+    // MARK: - Supersets
+    // The list is split into blocks: runs of normal exercises, and each superset on its own
+    // section with a "Superset" header. Opening any exercise of a superset opens all of them.
+
+    private struct Block: Identifiable {
+        let tag: String?          // superset tag, nil for normal exercises
+        var states: [ExState]
+        var id: String { states.first?.ex.id ?? "" }
+        var isSuperset: Bool { tag != nil && states.count > 1 }
+    }
+
+    private func blocks(_ states: [ExState]) -> [Block] {
+        var out: [Block] = []
+        for s in states {
+            if let last = out.last, last.tag == s.ex.superset {
+                out[out.count - 1].states.append(s)
+            } else {
+                out.append(Block(tag: s.ex.superset, states: [s]))
+            }
+        }
+        return out
+    }
+
+    @ViewBuilder
+    private func blockSection(_ b: Block, openID: String?) -> some View {
+        let groupOpen = b.isSuperset && b.states.contains { $0.ex.id == openID }
+        Section {
+            ForEach(Array(b.states.enumerated()), id: \.element.ex.id) { i, s in
+                let badge: Int? = b.isSuperset ? i + 1 : nil
+                if s.ex.id == openID || groupOpen {
+                    expandedRows(s, badge: badge)
+                } else {
+                    collapsedRow(s, badge: badge)
+                }
+            }
+        } header: {
+            if b.isSuperset {
+                Label("Superset", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Tone.ink)
+            }
+        } footer: {
+            if b.isSuperset {
+                Text("Do one set of each back to back, then rest.")
+            }
+        }
+    }
+
+    // Small numbered circle showing an exercise's place in its superset (1, 2…).
+    @ViewBuilder
+    private func supersetBadge(_ n: Int?) -> some View {
+        if let n {
+            Text("\(n)")
+                .font(.caption2.bold())
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Tone.ink))
+        }
+    }
+
     // MARK: - Rows
 
-    private func collapsedRow(_ s: ExState) -> some View {
+    private func collapsedRow(_ s: ExState, badge: Int? = nil) -> some View {
         Button {
             withAnimation { expandedID = s.ex.id }
         } label: {
@@ -128,7 +182,10 @@ struct TodayView: View {
                     .font(.title3)
                     .foregroundStyle(s.done ? Tone.check : Color.secondary)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
+                    HStack(spacing: 6) {
+                        supersetBadge(badge)
+                        Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
+                    }
                     Text(collapsedSubtitle(s)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -141,13 +198,16 @@ struct TodayView: View {
 
     // The open exercise: a header row, one row per set, then a row with "+ Add set" / "Same as last time".
     @ViewBuilder
-    private func expandedRows(_ s: ExState) -> some View {
+    private func expandedRows(_ s: ExState, badge: Int? = nil) -> some View {
         HStack(alignment: .top) {
             Button {
                 withAnimation { expandedID = "" }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
+                    HStack(spacing: 6) {
+                        supersetBadge(badge)
+                        Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
+                    }
                     Text(planLine(s)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -308,7 +368,12 @@ struct TodayView: View {
         try? context.save()
         logCount += 1
         guard startRest else { return }
-        restEnd = .now.addingTimeInterval(TimeInterval(restSeconds))
+        // In a superset, rest only once every exercise in it has done this round's set.
+        if roundComplete(ex, n) {
+            restEnd = .now.addingTimeInterval(TimeInterval(restSeconds))
+        } else {
+            restEnd = nil
+        }
         let nowDone = (0..<before.count).allSatisfy { before.logged[$0 + 1] != nil || $0 + 1 == n }
         if !before.done && nowDone { advance(from: ex) }
     }
@@ -348,9 +413,22 @@ struct TodayView: View {
         }
     }
 
-    // Close the finished exercise and open the next one that isn't done.
+    // True when set `n` of `ex` was the last one needed for this round of its superset
+    // (every other exercise in it has set n logged, or has fewer than n sets). Always true for normal exercises.
+    private func roundComplete(_ ex: ExerciseTemplate, _ n: Int) -> Bool {
+        PlanTemplate.supersetGroup(of: ex, in: workout).allSatisfy { m in
+            guard m.id != ex.id else { return true }
+            let ms = state(for: m)
+            return ms.logged[n] != nil || n > ms.count
+        }
+    }
+
+    // Close the finished exercise and open the next one that isn't done
+    // (another exercise in the same superset first, so the superset stays open until all of it is done).
     private func advance(from ex: ExerciseTemplate) {
-        let next = workout.exercises.first { $0.id != ex.id && !state(for: $0).done }
+        let partners = PlanTemplate.supersetGroup(of: ex, in: workout)
+        let next = partners.first { $0.id != ex.id && !state(for: $0).done }
+            ?? workout.exercises.first { $0.id != ex.id && !state(for: $0).done }
         withAnimation { expandedID = next?.id ?? "" }
     }
 
@@ -482,8 +560,21 @@ struct ExerciseHowToView: View {
             }
             Section("Plan") {
                 Text("\(exercise.sets) × \(exercise.reps)")
+                if let partners = supersetPartners {
+                    Label("Superset with \(partners)", systemImage: "arrow.triangle.2.circlepath")
+                }
             }
         }
         .navigationTitle(exercise.name)
+    }
+
+    // "Push-ups" — the other exercises in this one's superset, or nil if it isn't in one.
+    private var supersetPartners: String? {
+        guard exercise.superset != nil,
+              let w = PlanTemplate.phase1.first(where: { $0.exercises.contains(exercise) }) else { return nil }
+        let names = PlanTemplate.supersetGroup(of: exercise, in: w)
+            .filter { $0.id != exercise.id }
+            .map(\.name)
+        return names.isEmpty ? nil : names.joined(separator: " and ")
     }
 }
