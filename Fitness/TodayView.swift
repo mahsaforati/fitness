@@ -41,6 +41,37 @@ struct TodayView: View {
         overrideRaw = id == scheduled.id ? "" : "\(PlanTemplate.dayKey(today))|\(id)"
     }
 
+    // Date, then the workout name with a small swap button at the end of the line.
+    // The button opens Your workouts (A, B, C with previews) to swap today's workout.
+    private var titleRow: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(today.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
+                .font(.subheadline).foregroundStyle(.secondary)
+            HStack(alignment: .center, spacing: 10) {
+                Text(workout.title)
+                    .font(.title.bold())
+                    .foregroundStyle(Tone.ink)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 0)
+                Button { showingWorkouts = true } label: {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color(red: 0.267, green: 0.251, blue: 0.235))
+                        .frame(width: 36, height: 36)
+                        .background(Circle().fill(Color(red: 0.906, green: 0.898, blue: 0.894)))
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Your workouts")
+            }
+            if planned.id != scheduled.id {
+                Text("Swapped for today · scheduled was Workout \(scheduled.id)")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.top, 8)
+    }
+
     var body: some View {
         let states = workout.exercises.map(state(for:))
         let doneCount = states.filter(\.done).count
@@ -49,30 +80,16 @@ struct TodayView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
-                    WorkoutHeader(done: doneCount, total: states.count)
+                    titleRow
                         .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                        .listRowSeparator(.hidden)
                 }
 
                 Section {
-                    Button { showingWorkouts = true } label: {
-                        HStack(spacing: 10) {
-                            Image(systemName: "square.stack")
-                                .foregroundStyle(Tone.ink)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Your workouts").font(.subheadline.weight(.semibold))
-                                Text(planned.id == scheduled.id
-                                     ? "See and preview A, B and C"
-                                     : "Swapped for today · scheduled was \(scheduled.id)")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .foregroundStyle(Color.primary)
-                    }
+                    WorkoutHeader(done: doneCount, total: states.count)
+                        .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                 }
 
                 ForEach(blocks(states)) { b in
@@ -95,7 +112,8 @@ struct TodayView: View {
                     }
                 }
             }
-            .navigationTitle(workout.title)
+            .navigationTitle(workout.title)          // used for the back button on pushed pages
+            .toolbar(.hidden, for: .navigationBar)   // Today draws its own title row (with the swap button)
             .navigationDestination(for: ExerciseTemplate.self) { ExerciseHowToView(exercise: $0) }
             .sheet(isPresented: $showingWorkouts) {
                 WorkoutsSheet(todayID: planned.id, scheduledID: scheduled.id, onPick: pickWorkout)
