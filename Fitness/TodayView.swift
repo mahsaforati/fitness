@@ -41,21 +41,19 @@ struct TodayView: View {
         overrideRaw = id == scheduled.id ? "" : "\(PlanTemplate.dayKey(today))|\(id)"
     }
 
-    // Date, then the workout name with a small swap button at the end of the line.
+    // The workout name (always one line; it shrinks to fit) with a small dumbbell button at the end.
     // The button opens Your workouts (A, B, C with previews) to swap today's workout.
     private var titleRow: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(today.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)))
-                .font(.subheadline).foregroundStyle(.secondary)
             HStack(alignment: .center, spacing: 10) {
                 Text(workout.title)
                     .font(.title.bold())
                     .foregroundStyle(Tone.ink)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
                 Spacer(minLength: 0)
                 Button { showingWorkouts = true } label: {
-                    Image(systemName: "arrow.left.arrow.right")
+                    Image(systemName: "dumbbell.fill")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color(red: 0.267, green: 0.251, blue: 0.235))
                         .frame(width: 36, height: 36)
