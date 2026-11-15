@@ -123,6 +123,7 @@ private enum Palette {
     static let card       = Color.white
     static let pastDay    = Color(red: 0.980, green: 0.980, blue: 0.976) // #FAFAF9
     static let done       = Color(red: 0.890, green: 0.910, blue: 0.878) // #E3E8E0 sage
+    static let today      = Color(red: 0.420, green: 0.520, blue: 0.400) // darker sage outline for today
     static let ink        = Color(red: 0.110, green: 0.098, blue: 0.090) // #1C1917
     static let muted      = Color(red: 0.557, green: 0.557, blue: 0.576) // #8E8E93
 }
@@ -139,12 +140,12 @@ private struct DayCell: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(day.formatted(.dateTime.day()))
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(isToday ? Color.white : Palette.ink)
+                .font(.system(size: 14, weight: isToday ? .bold : .semibold))
+                .foregroundStyle(isToday ? Palette.today : Palette.ink)
             if let letter {
                 Text(letter)
                     .font(.system(size: 11))
-                    .foregroundStyle(isToday ? Color.white.opacity(0.75) : Palette.muted)
+                    .foregroundStyle(Palette.muted)
             }
             Spacer(minLength: 0)
         }
@@ -153,7 +154,7 @@ private struct DayCell: View {
         .frame(maxWidth: .infinity, minHeight: 50, maxHeight: 50, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 10).fill(fill))
         .overlay(RoundedRectangle(cornerRadius: 10)
-            .strokeBorder(Palette.ink.opacity(isSelected && !isToday ? 0.7 : 0), lineWidth: 1.5))
+            .strokeBorder(border, lineWidth: isToday ? 2 : 1.5))
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(day.formatted(date: .complete, time: .omitted)
@@ -161,10 +162,15 @@ private struct DayCell: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    // Done days are sage green (today included); today gets a sage outline, the selected day a grey one.
     private var fill: Color {
-        if isToday { return Palette.ink }
         if letter != nil { return Palette.done }
         return isPast ? Palette.pastDay : Palette.card
+    }
+
+    private var border: Color {
+        if isToday { return Palette.today }
+        return isSelected ? Palette.ink.opacity(0.35) : .clear
     }
 }
 
