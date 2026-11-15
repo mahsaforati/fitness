@@ -113,7 +113,7 @@ extension PlanTemplate {
         guard let edit, !edit.isEmpty else { return w }
         let kept = w.exercises.filter { !edit.removed.contains($0.id) }
         let added = edit.added
-            .compactMap { id in allExercises.first { $0.id == id } }
+            .compactMap { id in allExercises.first { $0.id == id } ?? ExerciseCatalog.template(id: id) }
             .filter { a in !kept.contains { $0.id == a.id } }
         var extra: [ExerciseTemplate] = []
         for ex in added where !extra.contains(where: { $0.id == ex.id }) {

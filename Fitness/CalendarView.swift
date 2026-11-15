@@ -108,9 +108,11 @@ struct CalendarView: View {
 
     // The workout most of a day's logged exercises belong to.
     static func workout(for logs: [SetLog]) -> WorkoutTemplate? {
-        let counts = Dictionary(grouping: logs) { log in
+        // Exercises added from the big list belong to no workout, so they don't count here.
+        let ids = logs.compactMap { log in
             PlanTemplate.phase1.first { $0.exercises.contains { $0.id == log.exerciseID } }?.id
-        }.mapValues(\.count)
+        }
+        let counts = Dictionary(grouping: ids) { $0 }.mapValues(\.count)
         guard let id = counts.max(by: { $0.value < $1.value })?.key else { return nil }
         return PlanTemplate.workout(id: id)
     }
@@ -245,7 +247,7 @@ private struct DayCard: View {
             .sorted { (order.firstIndex(of: $0) ?? .max, $0) < (order.firstIndex(of: $1) ?? .max, $1) }
             .map { id in
                 LoggedExercise(id: id,
-                               name: Self.allExercises.first { $0.id == id }?.name ?? id,
+                               name: ExerciseCatalog.name(for: id),
                                sets: grouped[id]!.sorted { $0.setNumber < $1.setNumber })
             }
     }

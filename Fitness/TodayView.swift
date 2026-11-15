@@ -258,7 +258,7 @@ struct TodayView: View {
             }
             .buttonStyle(.borderless)
 
-            if ExerciseLibrary.info(for: s.ex.id) != nil {
+            if ExerciseLibrary.info(for: s.ex.id) != nil || ExerciseCatalog.exercise(id: s.ex.id) != nil {
                 Button { path.append(s.ex) } label: {
                     Text("How")
                         .font(.footnote.bold())
@@ -660,32 +660,136 @@ private struct AddExerciseSheet: View {
     let onAdd: (ExerciseTemplate) -> Void
     @Environment(\.dismiss) private var dismiss
 
+    @State private var query = ""
+    @State private var homeOnly = true        // dumbbell + bodyweight only
+    @State private var bodyPart = "all"
+    @State private var preview: CatalogExercise?
+
+    private var q: String { query.trimmingCharacters(in: .whitespaces).lowercased() }
+
+    // Catalog exercises matching the search and filters.
+    private var matches: [CatalogExercise] {
+        ExerciseCatalog.all.filter { ex in
+            !current.contains(ex.id)
+                && (!homeOnly || ExerciseCatalog.homeEquipment.contains(ex.equipment))
+                && (bodyPart == "all" || ex.bodyPart == bodyPart)
+                && (q.isEmpty || ex.name.lowercased().contains(q) || ex.target.contains(q)
+                    || ex.secondary.contains { $0.contains(q) })
+        }
+    }
+
+    private func planOptions(_ w: WorkoutTemplate) -> [ExerciseTemplate] {
+        w.exercises.filter { !current.contains($0.id) && (q.isEmpty || $0.name.lowercased().contains(q)) }
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                ForEach(PlanTemplate.phase1) { w in
-                    let options = w.exercises.filter { !current.contains($0.id) }
-                    if !options.isEmpty {
-                        Section(w.title) {
-                            ForEach(options) { ex in
-                                Button { onAdd(ex); dismiss() } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(ex.name).foregroundStyle(Color.primary)
-                                        Text("\(ex.sets) × \(ex.reps)")
-                                            .font(.subheadline).foregroundStyle(.secondary)
+                Section {
+                    Picker("Equipment", selection: $homeOnly) {
+                        Text("Dumbbell + bodyweight").tag(true)
+                        Text("All equipment").tag(false)
+                    }
+                    .pickerStyle(.segmented)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
+                    Picker("Body part", selection: $bodyPart) {
+                        Text("All").tag("all")
+                        ForEach(ExerciseCatalog.bodyParts, id: \.self) { Text($0.capitalized).tag($0) }
+                    }
+                }
+
+                // Your plan's exercises first (they have your animations).
+                if bodyPart == "all" {
+                    ForEach(PlanTemplate.phase1) { w in
+                        let options = planOptions(w)
+                        if !options.isEmpty {
+                            Section("Your plan · \(w.title)") {
+                                ForEach(options) { ex in
+                                    Button { add(ex) } label: {
+                                        row(ex.name, "\(ex.sets) × \(ex.reps)")
                                     }
                                 }
                             }
                         }
                     }
                 }
+
+                Section("All exercises · \(matches.count)") {
+                    ForEach(matches) { ex in
+                        HStack {
+                            Button { add(ExerciseCatalog.template(id: ex.id)) } label: {
+                                row(ex.name, "\(ex.target.capitalized) · \(ex.equipment)")
+                            }
+                            .buttonStyle(.borderless)
+                            Button { preview = ex } label: {
+                                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("How to do \(ex.name)")
+                        }
+                    }
+                }
             }
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Search exercises or muscles")
             .navigationTitle("Add to today")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
+            .navigationDestination(item: $preview) { ex in
+                CatalogDetailView(exercise: ex, onAdd: { add(ExerciseCatalog.template(id: ex.id)) })
+            }
         }
+    }
+
+    private func row(_ title: String, _ subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).foregroundStyle(Color.primary)
+            Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private func add(_ ex: ExerciseTemplate?) {
+        guard let ex else { return }
+        onAdd(ex)
+        dismiss()
+    }
+}
+
+// How-to for an exercise from the big list: muscles, equipment and steps (no pictures).
+struct CatalogDetailView: View {
+    let exercise: CatalogExercise
+    var onAdd: (() -> Void)? = nil
+
+    var body: some View {
+        Form {
+            Section("How to") {
+                ForEach(Array(exercise.steps.enumerated()), id: \.offset) { i, step in
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text("\(i + 1)").font(.subheadline.bold()).monospacedDigit()
+                        Text(step)
+                    }
+                }
+            }
+            Section("Muscles") {
+                LabeledContent("Main", value: exercise.target.capitalized)
+                if !exercise.secondary.isEmpty {
+                    LabeledContent("Also works", value: exercise.secondary.map(\.capitalized).joined(separator: ", "))
+                }
+                LabeledContent("Equipment", value: exercise.equipment.capitalized)
+            }
+            if let onAdd {
+                Section {
+                    Button("Add to today", systemImage: "plus.circle", action: onAdd)
+                }
+            }
+        }
+        .navigationTitle(exercise.name)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -798,6 +902,19 @@ struct ExerciseHowToView: View {
         Form {
             if let info = ExerciseLibrary.info(for: exercise.id) {
                 Section { HowToCarousel(info: info) }
+            } else if let c = ExerciseCatalog.exercise(id: exercise.id) {
+                Section("How to") {
+                    ForEach(Array(c.steps.enumerated()), id: \.offset) { i, step in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text("\(i + 1)").font(.subheadline.bold()).monospacedDigit()
+                            Text(step)
+                        }
+                    }
+                }
+                Section("Muscles") {
+                    LabeledContent("Main", value: c.target.capitalized)
+                    LabeledContent("Equipment", value: c.equipment.capitalized)
+                }
             }
             Section("Plan") {
                 Text("\(exercise.sets) × \(exercise.reps)")

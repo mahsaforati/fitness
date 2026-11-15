@@ -8,6 +8,7 @@ iOS app (SwiftUI + SwiftData) for logging weights and reps against a 6-month hom
 - Swap today's workout: tap A, B or C at the top of Today; the swap lasts for that day only, then the normal schedule resumes (Undo returns to the scheduled one)
 - Quick logging on Today: the current exercise opens with one row per set; tap to log last session's numbers, tap again to adjust with − / +, swipe left to remove, **+ Add set**, **Same as last time**
 - **Edit today's workout**: swipe left on an exercise (or long-press) to remove it, **Add exercise** to add any exercise from the plan; changes are saved for that day only and never change the plan (**Reset to plan** undoes them)
+- **Exercise list**: Add exercise searches 1,324 exercises (filter Dumbbell + bodyweight / All equipment and by body part; ⓘ shows steps and muscles). Text from [exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset) (MIT, notice on the Plan tab); its GIFs/pictures are © Gym visual and not included
 - **Supersets**: exercises tagged with the same `superset` in `PlanTemplate.swift` sit together under a "Superset" header, numbered 1, 2…, open together, and the rest timer starts only after one set of each (Workout B: Rear-delt fly + Push-ups)
 - Sets save instantly (one record per set per day), a rest timer starts after each set, and a bar shows exercises done
 - Weights stored in kg, shown in **lb by default**; switch units on the Plan tab
