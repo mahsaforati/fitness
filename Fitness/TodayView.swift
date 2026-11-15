@@ -11,6 +11,7 @@ struct TodayView: View {
     private var units: UnitSystem { UnitSystem(rawValue: unitsRaw) ?? .imperial }
     @AppStorage(PlanTemplate.overrideKey) private var overrideRaw = ""
     @AppStorage("restSeconds") private var restSeconds = 90
+    @AppStorage(PlanTemplate.editsKey) private var editsRaw = ""   // today's added/removed exercises
     @Environment(\.modelContext) private var context
     @Query(sort: \SetLog.date) private var allLogs: [SetLog]
 
@@ -21,11 +22,18 @@ struct TodayView: View {
     @State private var restEnd: Date?
     @State private var logCount = 0
     @State private var restDoneCount = 0
+    @State private var showingAdd = false
+    @State private var pendingRemoval: ExerciseTemplate?
+    @State private var confirmingReset = false
 
     private var today: Date { .now }
     private var dayStart: Date { Calendar.current.startOfDay(for: .now) }
     private var scheduled: WorkoutTemplate { PlanTemplate.scheduledWorkout(for: today) }
-    private var workout: WorkoutTemplate { PlanTemplate.workout(for: today, override: overrideRaw) }
+    private var planned: WorkoutTemplate { PlanTemplate.workout(for: today, override: overrideRaw) }
+    private var editKey: String { PlanTemplate.editKey(today, planned.id) }
+    private var dayEdit: DayEdit { PlanTemplate.edits(from: editsRaw)[editKey] ?? DayEdit() }
+    // What you're doing today: the plan with today's removals/additions. The plan itself is untouched.
+    private var workout: WorkoutTemplate { PlanTemplate.applying(dayEdit, to: planned) }
     private var isSwapped: Bool { workout.id != scheduled.id }
 
     // Picking the scheduled workout clears the override.
@@ -78,6 +86,24 @@ struct TodayView: View {
                 ForEach(blocks(states)) { b in
                     blockSection(b, openID: openID)
                 }
+
+                Section {
+                    Button { showingAdd = true } label: {
+                        Label("Add exercise", systemImage: "plus.circle")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.primary)
+                    }
+                } footer: {
+                    if dayEdit.isEmpty {
+                        Text("Swipe left on an exercise to remove it. Changes are for today only — your plan stays the same.")
+                    } else {
+                        HStack {
+                            Text(editSummary)
+                            Spacer()
+                            Button("Reset to plan") { confirmingReset = true }.font(.footnote.bold())
+                        }
+                    }
+                }
             }
             .navigationTitle(workout.title)
             .navigationDestination(for: ExerciseTemplate.self) { ExerciseHowToView(exercise: $0) }
@@ -86,6 +112,23 @@ struct TodayView: View {
                           onSave: { saveEdit($0) },
                           onDelete: { removeSet(e.exercise, e.setNumber) })
                     .presentationDetents([.height(320)])
+            }
+            .sheet(isPresented: $showingAdd) {
+                AddExerciseSheet(current: Set(workout.exercises.map(\.id)), onAdd: addExercise)
+            }
+            .confirmationDialog("Remove \(pendingRemoval?.name ?? "exercise") from today?",
+                                isPresented: Binding(get: { pendingRemoval != nil },
+                                                     set: { if !$0 { pendingRemoval = nil } }),
+                                titleVisibility: .visible,
+                                presenting: pendingRemoval) { ex in
+                Button("Remove and delete today's sets", role: .destructive) { removeExercise(ex) }
+            } message: { _ in
+                Text("The sets you've logged for it today will be deleted. Your plan won't change.")
+            }
+            .confirmationDialog("Reset today to the plan?", isPresented: $confirmingReset, titleVisibility: .visible) {
+                Button("Reset", role: .destructive) { resetEdits() }
+            } message: {
+                Text("Removed exercises come back. Exercises you added, and any sets logged for them today, are removed.")
             }
             .safeAreaInset(edge: .bottom) {
                 if let end = restEnd {
@@ -194,6 +237,15 @@ struct TodayView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s) }
+        .contextMenu { removeButton(s) }
+    }
+
+    private func removeButton(_ s: ExState) -> some View {
+        Button { requestRemove(s) } label: {
+            Label("Remove from today", systemImage: "trash")
+        }
+        .tint(.red)
     }
 
     // The open exercise: a header row, one row per set, then a row with "+ Add set" / "Same as last time".
@@ -227,6 +279,8 @@ struct TodayView: View {
             }
         }
         .padding(.vertical, 4)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s) }
+        .contextMenu { removeButton(s) }
 
         ForEach(0..<s.count, id: \.self) { i in
             setRow(s, i + 1)
@@ -413,6 +467,66 @@ struct TodayView: View {
         }
     }
 
+    // MARK: - Editing today's exercises (saved for today only, never changes the plan)
+
+    private var editSummary: String {
+        var parts: [String] = []
+        if !dayEdit.removed.isEmpty { parts.append("\(dayEdit.removed.count) removed") }
+        if !dayEdit.added.isEmpty { parts.append("\(dayEdit.added.count) added") }
+        return "Changed for today only · " + parts.joined(separator: ", ")
+    }
+
+    private func updateEdit(_ change: (inout DayEdit) -> Void) {
+        // Keep only today's entries, so old days don't pile up.
+        var all = PlanTemplate.edits(from: editsRaw).filter { $0.key.hasPrefix(PlanTemplate.dayKey(today)) }
+        var e = all[editKey] ?? DayEdit()
+        change(&e)
+        all[editKey] = e.isEmpty ? nil : e
+        editsRaw = PlanTemplate.encode(all)
+    }
+
+    // Ask first only if sets were already logged for it today.
+    private func requestRemove(_ s: ExState) {
+        if s.logged.isEmpty { removeExercise(s.ex) } else { pendingRemoval = s.ex }
+    }
+
+    private func removeExercise(_ ex: ExerciseTemplate) {
+        deleteTodaysLogs(of: ex.id)
+        extraSets[ex.id] = nil
+        if expandedID == ex.id { expandedID = nil }
+        withAnimation {
+            updateEdit { e in
+                if let i = e.added.firstIndex(of: ex.id) { e.added.remove(at: i) }
+                else if !e.removed.contains(ex.id) { e.removed.append(ex.id) }
+            }
+        }
+    }
+
+    // Re-adding a planned exercise you removed puts it back in its usual place.
+    private func addExercise(_ ex: ExerciseTemplate) {
+        withAnimation {
+            updateEdit { e in
+                if let i = e.removed.firstIndex(of: ex.id) { e.removed.remove(at: i) }
+                else if !e.added.contains(ex.id) { e.added.append(ex.id) }
+            }
+            expandedID = ex.id
+        }
+    }
+
+    private func resetEdits() {
+        for id in dayEdit.added { deleteTodaysLogs(of: id); extraSets[id] = nil }
+        withAnimation {
+            updateEdit { $0 = DayEdit() }
+            expandedID = nil
+        }
+    }
+
+    private func deleteTodaysLogs(of exerciseID: String) {
+        let start = dayStart
+        for log in allLogs where log.exerciseID == exerciseID && log.date >= start { context.delete(log) }
+        try? context.save()
+    }
+
     // True when set `n` of `ex` was the last one needed for this round of its superset
     // (every other exercise in it has set n logged, or has fewer than n sets). Always true for normal exercises.
     private func roundComplete(_ ex: ExerciseTemplate, _ n: Int) -> Bool {
@@ -518,6 +632,42 @@ struct SetEditor: View {
                 .buttonRepeatBehavior(.enabled)
         }
         .tint(.primary)
+    }
+}
+
+// MARK: - Add an exercise to today
+
+private struct AddExerciseSheet: View {
+    let current: Set<String>                  // exercises already in today's list
+    let onAdd: (ExerciseTemplate) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(PlanTemplate.phase1) { w in
+                    let options = w.exercises.filter { !current.contains($0.id) }
+                    if !options.isEmpty {
+                        Section(w.title) {
+                            ForEach(options) { ex in
+                                Button { onAdd(ex); dismiss() } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(ex.name).foregroundStyle(Color.primary)
+                                        Text("\(ex.sets) × \(ex.reps)")
+                                            .font(.subheadline).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Add to today")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            }
+        }
     }
 }
 

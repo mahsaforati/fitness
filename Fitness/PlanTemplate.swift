@@ -70,3 +70,46 @@ enum PlanTemplate {
         return scheduledWorkout(for: date)
     }
 }
+
+// MARK: - Edit today's workout
+// Exercises removed from / added to one day's workout. Saved under the day and workout
+// ("2026-11-14|A"), so the plan itself never changes and the next session starts from the plan again.
+
+struct DayEdit: Codable, Equatable {
+    var removed: [String] = []   // planned exercise IDs taken out today
+    var added: [String] = []     // exercise IDs added today, in the order they were added
+    var isEmpty: Bool { removed.isEmpty && added.isEmpty }
+}
+
+extension PlanTemplate {
+    static let editsKey = "todayEdits"
+
+    // Every exercise in the plan, once each — what can be added to a day.
+    static let allExercises: [ExerciseTemplate] = {
+        var seen = Set<String>()
+        return phase1.flatMap(\.exercises).filter { seen.insert($0.id).inserted }
+    }()
+
+    static func editKey(_ date: Date, _ workoutID: String) -> String { "\(dayKey(date))|\(workoutID)" }
+
+    static func edits(from stored: String) -> [String: DayEdit] {
+        (try? JSONDecoder().decode([String: DayEdit].self, from: Data(stored.utf8))) ?? [:]
+    }
+
+    static func encode(_ edits: [String: DayEdit]) -> String {
+        guard let data = try? JSONEncoder().encode(edits) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    // The planned workout with today's removals and additions applied.
+    // Added exercises go at the end and are never part of a superset.
+    static func applying(_ edit: DayEdit?, to w: WorkoutTemplate) -> WorkoutTemplate {
+        guard let edit, !edit.isEmpty else { return w }
+        let kept = w.exercises.filter { !edit.removed.contains($0.id) }
+        let extra = edit.added
+            .compactMap { id in allExercises.first { $0.id == id } }
+            .filter { a in !kept.contains { $0.id == a.id } }
+            .map { ExerciseTemplate(id: $0.id, name: $0.name, sets: $0.sets, reps: $0.reps) }
+        return WorkoutTemplate(id: w.id, title: w.title, exercises: kept + extra)
+    }
+}
