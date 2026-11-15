@@ -879,21 +879,23 @@ private struct WorkoutHeader: View {
         }
     }
 
-    // After Stop: the Start button comes back, with "✓ Done in 42:10 · 6 of 6" underneath.
+    // After Stop: the Start button comes back. "✓ Done in 42:10" shows underneath only if every exercise was finished.
     // Starting again begins a fresh timer; logged sets stay as they are.
     private var finishedView: some View {
         VStack(alignment: .leading, spacing: 8) {
             startButton
-            Label("Done in \(format(elapsed)) · \(done) of \(total)", systemImage: "checkmark")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Tone.check)
-                .padding(.leading, 4)
+            if total > 0 && done >= total {
+                Label("Done in \(format(elapsed))", systemImage: "checkmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Tone.check)
+                    .padding(.leading, 4)
+            }
         }
     }
 
     private var startButton: some View {
         Button(action: start) {
-            Label("Start workout", systemImage: "play.fill")
+            Label("Start", systemImage: "play.fill")
                 .font(.headline)
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, minHeight: 48)
