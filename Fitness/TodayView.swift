@@ -10,7 +10,7 @@ struct TodayView: View {
     @AppStorage("units") private var unitsRaw = UnitSystem.imperial.rawValue
     private var units: UnitSystem { UnitSystem(rawValue: unitsRaw) ?? .imperial }
     @AppStorage(PlanTemplate.overrideKey) private var overrideRaw = ""
-    @AppStorage("restSeconds") private var restSeconds = 90
+    @AppStorage("restSeconds") private var restSeconds = 80   // 1:20
     @AppStorage(PlanTemplate.editsKey) private var editsRaw = ""   // today's added/removed exercises
     @Environment(\.modelContext) private var context
     @Query(sort: \SetLog.date) private var allLogs: [SetLog]
@@ -117,7 +117,7 @@ struct TodayView: View {
             .safeAreaInset(edge: .bottom) {
                 if let end = restEnd {
                     RestBar(end: end,
-                            add: { restEnd = end.addingTimeInterval(30) },
+                            add: { restEnd = end.addingTimeInterval(10) },
                             skip: { restEnd = nil })
                 }
             }
@@ -777,7 +777,7 @@ private struct RestBar: View {
                 Text("Rest \(left / 60):\(String(format: "%02d", left % 60))")
                     .font(.headline).monospacedDigit()
                 Spacer()
-                Button("+30s", action: add).buttonStyle(.bordered)
+                Button("+10s", action: add).buttonStyle(.bordered)
                 Button("Skip", action: skip).buttonStyle(.bordered)
             }
             .tint(.primary)
