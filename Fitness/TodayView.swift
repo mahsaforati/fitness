@@ -26,6 +26,11 @@ struct TodayView: View {
     @State private var pendingRemoval: ExerciseTemplate?
     @State private var confirmingReset = false
     @State private var showingWorkouts = false
+    // Shared with WorkoutHeader: picking another workout after finishing brings back its Start button.
+    @AppStorage("workoutTimerFinished") private var timerFinished = false
+    @AppStorage("workoutTimerStarted") private var timerStarted = false
+    @AppStorage("workoutTimerStart") private var timerStartedAt = 0.0
+    @AppStorage("workoutTimerElapsed") private var timerElapsed = 0.0
 
     private var today: Date { .now }
     private var dayStart: Date { Calendar.current.startOfDay(for: .now) }
@@ -41,16 +46,26 @@ struct TodayView: View {
         overrideRaw = id == scheduled.id ? "" : "\(PlanTemplate.dayKey(today))|\(id)"
     }
 
-    // The workout name (always one line; it shrinks to fit) with a small dumbbell button at the end.
+    // "Workout A" with its focus ("Lower body") underneath, and a small dumbbell button at the end.
     // The button opens Your workouts (A, B, C with previews) to swap today's workout.
     private var titleRow: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .center, spacing: 10) {
-                Text(workout.title)
-                    .font(.title.bold())
-                    .foregroundStyle(Tone.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                // "Workout A · Lower body" → "Workout A" on top, "Lower body" smaller underneath
+                let parts = workout.title.components(separatedBy: " · ")
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(parts[0])
+                        .font(.title.bold())
+                        .foregroundStyle(Tone.ink)
+                        .lineLimit(1)
+                    if parts.count > 1 {
+                        Text(parts.dropFirst().joined(separator: " · "))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
                 Spacer(minLength: 0)
                 Button { showingWorkouts = true } label: {
                     Image(systemName: "dumbbell.fill")
@@ -79,7 +94,10 @@ struct TodayView: View {
                         .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
                         .listRowSeparator(.hidden)
                     // Same section as the title so there's only a small gap between them.
-                    WorkoutHeader(done: doneCount, total: states.count)
+                    WorkoutHeader(done: doneCount, total: states.count,
+                                  workoutName: workout.title.components(separatedBy: " · ")[0],
+                                  onAnother: { showingWorkouts = true },
+                                  onRestart: restartWorkout)
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 10, leading: 4, bottom: 0, trailing: 4))
                         .listRowSeparator(.hidden)
@@ -148,6 +166,7 @@ struct TodayView: View {
             .onChange(of: workout.id) {
                 expandedID = nil
                 extraSets = [:]
+                if timerFinished { resetTimer() }   // finished one workout, now doing another
             }
         }
     }
@@ -512,6 +531,23 @@ struct TodayView: View {
         if s.logged.isEmpty { removeExercise(s.ex) } else { pendingRemoval = s.ex }
     }
 
+    // Restart: clear today's sets for this workout and go back to the Start button.
+    private func restartWorkout() {
+        withAnimation {
+            for ex in workout.exercises { deleteTodaysLogs(of: ex.id) }
+            extraSets = [:]
+            expandedID = nil
+        }
+        resetTimer()
+    }
+
+    private func resetTimer() {
+        timerStartedAt = 0
+        timerElapsed = 0
+        timerFinished = false
+        withAnimation(.easeOut(duration: 0.25)) { timerStarted = false }
+    }
+
     private func removeExercise(_ ex: ExerciseTemplate) {
         deleteTodaysLogs(of: ex.id)
         extraSets[ex.id] = nil
@@ -817,6 +853,9 @@ struct CatalogDetailView: View {
 private struct WorkoutHeader: View {
     let done: Int
     let total: Int
+    let workoutName: String
+    let onAnother: () -> Void   // opens Your workouts
+    let onRestart: () -> Void   // clears today's sets for this workout and resets the timer
 
     @AppStorage("workoutTimerStart") private var startedAt = 0.0      // when it was last started; 0 = not running
     @AppStorage("workoutTimerElapsed") private var elapsed = 0.0      // seconds banked before the last start
@@ -824,6 +863,7 @@ private struct WorkoutHeader: View {
     @AppStorage("workoutTimerStarted") private var started = false    // pressed Start today
     @AppStorage("workoutTimerFinished") private var finished = false  // pressed Stop today
     @State private var confirmingStop = false
+    @State private var confirmingRestart = false
 
     private var running: Bool { startedAt > 0 }
 
@@ -834,15 +874,15 @@ private struct WorkoutHeader: View {
 
     var body: some View {
         Group {
-            if started || running || elapsed > 0 {   // also covers a timer started before this update
+            if finished {
+                finishedView
+            } else if started || running || elapsed > 0 {   // also covers a timer started before this update
                 HStack(spacing: 8) {
                     bar
-                    if !finished {
-                        circleButton(running ? "pause.fill" : "play.fill",
-                                     label: running ? "Pause workout timer" : "Resume workout timer",
-                                     action: togglePause)
-                        circleButton("stop.fill", label: "Stop workout") { confirmingStop = true }
-                    }
+                    circleButton(running ? "pause.fill" : "play.fill",
+                                 label: running ? "Pause workout timer" : "Resume workout timer",
+                                 action: togglePause)
+                    circleButton("stop.fill", label: "Stop workout") { confirmingStop = true }
                 }
             } else {
                 Button(action: start) {
@@ -860,6 +900,39 @@ private struct WorkoutHeader: View {
             Button("End workout", role: .destructive, action: stop)
         } message: {
             Text("The timer stops at its current time. Your logged sets stay as they are.")
+        }
+        .confirmationDialog("Restart \(workoutName)?", isPresented: $confirmingRestart, titleVisibility: .visible) {
+            Button("Restart", role: .destructive, action: onRestart)
+        } message: {
+            Text("Today's sets for \(workoutName) will be cleared so you can log them again.")
+        }
+    }
+
+    // After Stop: "✓ Done in 42:10 · 6 of 6", then "Start another workout" and a restart button.
+    private var finishedView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label("Done in \(format(elapsed)) · \(done) of \(total)", systemImage: "checkmark")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Tone.check)
+            HStack(spacing: 8) {
+                Button(action: onAnother) {
+                    Label("Start another workout", systemImage: "play.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(Capsule().fill(Self.sage))
+                }
+                .buttonStyle(.borderless)
+                Button { confirmingRestart = true } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Tone.ink)
+                        .frame(width: 48, height: 48)
+                        .background(Circle().fill(Self.track))
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Restart \(workoutName)")
+            }
         }
     }
 
