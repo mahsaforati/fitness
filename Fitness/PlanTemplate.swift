@@ -107,14 +107,27 @@ extension PlanTemplate {
     }
 
     // The planned workout with today's removals and additions applied.
-    // Added exercises go at the end and are never part of a superset.
+    // Added exercises go at the end and keep their superset: added exercises from the same
+    // superset are placed next to each other, so adding both halves gives you the superset.
     static func applying(_ edit: DayEdit?, to w: WorkoutTemplate) -> WorkoutTemplate {
         guard let edit, !edit.isEmpty else { return w }
         let kept = w.exercises.filter { !edit.removed.contains($0.id) }
-        let extra = edit.added
+        let added = edit.added
             .compactMap { id in allExercises.first { $0.id == id } }
             .filter { a in !kept.contains { $0.id == a.id } }
-            .map { ExerciseTemplate(id: $0.id, name: $0.name, sets: $0.sets, reps: $0.reps) }
+        var extra: [ExerciseTemplate] = []
+        for ex in added where !extra.contains(where: { $0.id == ex.id }) {
+            if let tag = ex.superset {
+                // Put this one and every other added exercise from its superset here, in plan order.
+                extra += added.filter { $0.superset == tag }.sorted { planIndex($0) < planIndex($1) }
+            } else {
+                extra.append(ex)
+            }
+        }
         return WorkoutTemplate(id: w.id, title: w.title, exercises: kept + extra)
+    }
+
+    private static func planIndex(_ ex: ExerciseTemplate) -> Int {
+        allExercises.firstIndex { $0.id == ex.id } ?? .max
     }
 }
