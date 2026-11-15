@@ -25,6 +25,7 @@ struct TodayView: View {
     @State private var showingAdd = false
     @State private var pendingRemoval: ExerciseTemplate?
     @State private var confirmingReset = false
+    @State private var showingWorkouts = false
 
     private var today: Date { .now }
     private var dayStart: Date { Calendar.current.startOfDay(for: .now) }
@@ -36,13 +37,8 @@ struct TodayView: View {
     private var workout: WorkoutTemplate { PlanTemplate.applying(dayEdit, to: planned) }
 
     // Picking the scheduled workout clears the override.
-    private var selectedID: Binding<String> {
-        Binding(
-            get: { workout.id },
-            set: { id in
-                overrideRaw = id == scheduled.id ? "" : "\(PlanTemplate.dayKey(today))|\(id)"
-            }
-        )
+    private func pickWorkout(_ id: String) {
+        overrideRaw = id == scheduled.id ? "" : "\(PlanTemplate.dayKey(today))|\(id)"
     }
 
     var body: some View {
@@ -53,18 +49,30 @@ struct TodayView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
-                    Picker("Today's workout", selection: selectedID) {
-                        ForEach(PlanTemplate.phase1) { Text($0.id).tag($0.id) }
-                    }
-                    .pickerStyle(.segmented)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
-                }
-
-                Section {
                     WorkoutHeader(done: doneCount, total: states.count)
                         .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                }
+
+                Section {
+                    Button { showingWorkouts = true } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "square.stack")
+                                .foregroundStyle(Tone.ink)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Your workouts").font(.subheadline.weight(.semibold))
+                                Text(planned.id == scheduled.id
+                                     ? "See and preview A, B and C"
+                                     : "Swapped for today · scheduled was \(scheduled.id)")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .foregroundStyle(Color.primary)
+                    }
                 }
 
                 ForEach(blocks(states)) { b in
@@ -89,6 +97,9 @@ struct TodayView: View {
             }
             .navigationTitle(workout.title)
             .navigationDestination(for: ExerciseTemplate.self) { ExerciseHowToView(exercise: $0) }
+            .sheet(isPresented: $showingWorkouts) {
+                WorkoutsSheet(todayID: planned.id, scheduledID: scheduled.id, onPick: pickWorkout)
+            }
             .sheet(isPresented: $showingAdd) {
                 AddExerciseSheet(current: Set(workout.exercises.map(\.id)), onAdd: addExercise)
             }
@@ -960,6 +971,115 @@ private struct RestBar: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
             .padding(.horizontal)
             .padding(.bottom, 8)
+        }
+    }
+}
+
+// MARK: - Your workouts (browse A, B, C with a preview; swap today's workout)
+
+private struct WorkoutsSheet: View {
+    let todayID: String
+    let scheduledID: String
+    let onPick: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(PlanTemplate.phase1) { w in
+                    Section {
+                        NavigationLink(value: w.id) { card(w) }
+                    }
+                }
+            }
+            .navigationTitle("Your workouts")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: String.self) { id in
+                if let w = PlanTemplate.workout(id: id) {
+                    WorkoutPreview(workout: w, isToday: w.id == todayID, isScheduled: w.id == scheduledID) {
+                        onPick(w.id)
+                        dismiss()
+                    }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+    }
+
+    // Title, a badge for today / scheduled, then a short preview of the exercises.
+    private func card(_ w: WorkoutTemplate) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(w.title).font(.headline)
+                Spacer()
+                if w.id == todayID { badge("Today") }
+                else if w.id == scheduledID { badge("Scheduled") }
+            }
+            Text("\(w.exercises.count) exercises · \(w.exercises.reduce(0) { $0 + $1.sets }) sets")
+                .font(.caption).foregroundStyle(.secondary)
+            Text(w.exercises.map(\.name).joined(separator: " · "))
+                .font(.footnote).foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func badge(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Tone.check)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Capsule().fill(Tone.done))
+    }
+}
+
+private struct WorkoutPreview: View {
+    let workout: WorkoutTemplate
+    let isToday: Bool
+    let isScheduled: Bool
+    let onPick: () -> Void
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(workout.exercises) { ex in
+                    NavigationLink {
+                        ExerciseHowToView(exercise: ex)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(ex.name).font(.subheadline.weight(.semibold))
+                            Text("\(ex.sets) × \(ex.reps)" + (ex.superset != nil ? " · superset" : ""))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } footer: {
+                Text("Tap an exercise to see how to do it.")
+            }
+        }
+        .navigationTitle(workout.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if isToday {
+                Label("This is today's workout", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Tone.check)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Capsule().fill(Tone.done))
+                    .padding(.horizontal).padding(.bottom, 8)
+            } else {
+                Button(action: onPick) {
+                    Text(isScheduled ? "Go back to the scheduled workout" : "Do this workout today")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(Capsule().fill(Color(red: 0.478, green: 0.545, blue: 0.455)))
+                }
+                .buttonStyle(.borderless)
+                .padding(.horizontal).padding(.bottom, 8)
+            }
         }
     }
 }
