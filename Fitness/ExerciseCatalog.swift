@@ -5,8 +5,8 @@ import ImageIO
 // The big exercise list (1,324 exercises) you can add to a day from "Add exercise".
 // Text only (names, muscles, equipment, steps) from the exercises-dataset by Hasan Emir Yıldırım,
 // MIT License — https://github.com/hasaneyldrm/exercises-dataset (notice shown on the Plan tab).
-// Exercise videos (GIFs) are © Gym visual — https://gymvisual.com/ — used under the owner's licence;
-// the credit is shown under every video. The plan's videos are in the app (ExerciseVideos/);
+// Exercise videos (GIFs) are © Gym visual — https://gymvisual.com/ — used under the owner's licence
+// (no on-screen credit required under that licence). The plan's videos are in the app (ExerciseVideos/);
 // the rest download the first time you open them and are kept on the phone.
 
 struct CatalogExercise: Codable, Identifiable, Hashable {
@@ -67,8 +67,6 @@ enum ExerciseCatalog {
     static func videoFile(for id: String) -> String? {
         (byID[id] ?? planVideos[id].flatMap { byID[$0] })?.video
     }
-
-    static let videoCredit = "© Gym visual — https://gymvisual.com/"
 
     static let licenseNotice = """
     Exercise list from exercises-dataset
@@ -143,7 +141,7 @@ private struct AnimatedImage: UIViewRepresentable {
     }
 }
 
-// The video for an exercise with the Gym visual credit under it.
+// The looping video for an exercise.
 struct ExerciseVideoView: View {
     let file: String
     @State private var image: UIImage?
@@ -164,8 +162,6 @@ struct ExerciseVideoView: View {
                 }
             }
             .frame(height: 240)
-            Text(ExerciseCatalog.videoCredit)
-                .font(.caption2).foregroundStyle(.secondary)
         }
         .task(id: file) {
             failed = false
