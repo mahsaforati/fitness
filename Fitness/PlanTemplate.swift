@@ -101,6 +101,11 @@ extension PlanTemplate {
         return String(decoding: data, as: UTF8.self)
     }
 
+    // A workout as it was on `date`, with that day's edits (if any) applied.
+    static func workout(_ w: WorkoutTemplate, editedOn date: Date, stored: String) -> WorkoutTemplate {
+        applying(edits(from: stored)[editKey(date, w.id)], to: w)
+    }
+
     // The planned workout with today's removals and additions applied.
     // Added exercises go at the end and are never part of a superset.
     static func applying(_ edit: DayEdit?, to w: WorkoutTemplate) -> WorkoutTemplate {

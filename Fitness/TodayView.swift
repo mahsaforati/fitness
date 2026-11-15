@@ -477,8 +477,8 @@ struct TodayView: View {
     }
 
     private func updateEdit(_ change: (inout DayEdit) -> Void) {
-        // Keep only today's entries, so old days don't pile up.
-        var all = PlanTemplate.edits(from: editsRaw).filter { $0.key.hasPrefix(PlanTemplate.dayKey(today)) }
+        // Past days' edits are kept (a few bytes each) so the Calendar can count against what you actually did.
+        var all = PlanTemplate.edits(from: editsRaw)
         var e = all[editKey] ?? DayEdit()
         change(&e)
         all[editKey] = e.isEmpty ? nil : e

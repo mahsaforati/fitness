@@ -174,6 +174,7 @@ private struct DayCard: View {
     let day: Date
     let logs: [SetLog]
     let units: UnitSystem
+    @AppStorage(PlanTemplate.editsKey) private var editsRaw = ""
 
     private static let allExercises = PlanTemplate.phase1.flatMap(\.exercises)
 
@@ -217,11 +218,14 @@ private struct DayCard: View {
         return "\(date) · Workout \(w.id)"
     }
 
-    // "6/6 exercises · volume 6,880 lb"
+    // "6/6 exercises · volume 6,880 lb" — counted against that day's workout as edited
+    // (exercises removed or added for that day), not the original plan.
     private var summary: String {
         let volume = logs.reduce(0.0) { $0 + units.display($1.weightKg) * Double($1.reps) }
         let done = exercises.count
-        let count = CalendarView.workout(for: logs).map { "\(done)/\($0.exercises.count)" } ?? "\(done)"
+        let count = CalendarView.workout(for: logs)
+            .map { PlanTemplate.workout($0, editedOn: day, stored: editsRaw) }
+            .map { "\(done)/\(max($0.exercises.count, done))" } ?? "\(done)"
         return "\(count) exercises · volume \(Int(volume.rounded()).formatted()) \(units.label)"
     }
 
