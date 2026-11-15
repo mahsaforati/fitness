@@ -62,11 +62,14 @@ struct TodayView: View {
                 }
 
                 Section {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ProgressView(value: Double(doneCount), total: Double(max(states.count, 1)))
-                            .tint(Tone.ink)
-                        Text("\(doneCount) of \(states.count) exercises done")
-                            .font(.footnote).foregroundStyle(.secondary)
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ProgressView(value: Double(doneCount), total: Double(max(states.count, 1)))
+                                .tint(Tone.ink)
+                            Text("\(doneCount) of \(states.count) exercises done")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        WorkoutTimer()
                     }
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
@@ -683,6 +686,79 @@ private struct AddExerciseSheet: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
         }
+    }
+}
+
+// MARK: - Workout timer (next to the progress bar)
+// Start / Stop works like a stopwatch: Stop pauses, Start carries on from there.
+// It's saved, so it keeps running if you leave the app, and it starts from 0:00 on a new day.
+// Long-press to reset.
+
+private struct WorkoutTimer: View {
+    @AppStorage("workoutTimerStart") private var startedAt = 0.0   // when it was last started; 0 = stopped
+    @AppStorage("workoutTimerElapsed") private var elapsed = 0.0   // seconds banked before the last start
+    @AppStorage("workoutTimerDay") private var day = ""            // day the timer belongs to
+
+    private var running: Bool { startedAt > 0 }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                Text(format(total(at: ctx.date)))
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(running ? Tone.ink : Color.secondary)
+            }
+            Button(action: toggle) {
+                Image(systemName: running ? "stop.fill" : "play.fill")
+                    .font(.footnote)
+                    .foregroundStyle(running ? Color.white : Tone.ink)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(running ? Tone.ink : Color(.systemGray5)))
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(running ? "Stop workout timer" : "Start workout timer")
+        }
+        .contextMenu {
+            Button("Reset timer", systemImage: "arrow.counterclockwise") { reset() }
+        }
+        .onAppear(perform: newDayCheck)
+    }
+
+    private func total(at date: Date) -> TimeInterval {
+        elapsed + (running ? max(0, date.timeIntervalSince1970 - startedAt) : 0)
+    }
+
+    private func toggle() {
+        newDayCheck()
+        if running {
+            elapsed = total(at: .now)
+            startedAt = 0
+        } else {
+            startedAt = Date.now.timeIntervalSince1970
+        }
+    }
+
+    private func reset() {
+        startedAt = 0
+        elapsed = 0
+    }
+
+    // A timer left over from another day starts again from zero.
+    private func newDayCheck() {
+        let today = PlanTemplate.dayKey(.now)
+        if day != today {
+            reset()
+            day = today
+        }
+    }
+
+    // "4:05", or "1:02:09" past an hour
+    private func format(_ t: TimeInterval) -> String {
+        let s = Int(t)
+        return s >= 3600
+            ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+            : String(format: "%d:%02d", s / 60, s % 60)
     }
 }
 
