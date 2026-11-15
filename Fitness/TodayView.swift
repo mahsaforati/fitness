@@ -3,7 +3,7 @@ import SwiftData
 
 // Today: log every set right on this screen.
 // - The exercise you're on opens up with a row per set (swipe left to remove one); finished exercises close with a ✓ and the next one opens.
-// - Tap a set row to log it with last session's numbers; tap a logged row to change it (− / +).
+// - Tap a set row to log it with last session's numbers; tap a logged row to change it right there (− / +).
 // - "Same as last time" logs all remaining sets in one tap; "+ Add set" adds an extra set.
 // - Everything saves as soon as you log it (one record per set per day), and a rest timer starts.
 struct TodayView: View {
@@ -107,12 +107,6 @@ struct TodayView: View {
             }
             .navigationTitle(workout.title)
             .navigationDestination(for: ExerciseTemplate.self) { ExerciseHowToView(exercise: $0) }
-            .sheet(item: $editing) { e in
-                SetEditor(edit: e, units: units,
-                          onSave: { saveEdit($0) },
-                          onDelete: { removeSet(e.exercise, e.setNumber) })
-                    .presentationDetents([.height(320)])
-            }
             .sheet(isPresented: $showingAdd) {
                 AddExerciseSheet(current: Set(workout.exercises.map(\.id)), onAdd: addExercise)
             }
@@ -218,12 +212,9 @@ struct TodayView: View {
 
     private func collapsedRow(_ s: ExState, badge: Int? = nil) -> some View {
         Button {
-            withAnimation { expandedID = s.ex.id }
+            withAnimation { expandedID = s.ex.id; editing = nil }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: s.done ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(s.done ? Tone.check : Color.secondary)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         supersetBadge(badge)
@@ -232,7 +223,12 @@ struct TodayView: View {
                     Text(collapsedSubtitle(s)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: "chevron.down").font(.footnote).foregroundStyle(.tertiary)
+                if s.done {
+                    Image(systemName: "checkmark").font(.subheadline.bold()).foregroundStyle(Tone.check)
+                        .accessibilityLabel("Done")
+                } else {
+                    Image(systemName: "chevron.down").font(.footnote).foregroundStyle(.tertiary)
+                }
             }
             .contentShape(Rectangle())
         }
@@ -253,7 +249,7 @@ struct TodayView: View {
     private func expandedRows(_ s: ExState, badge: Int? = nil) -> some View {
         HStack(alignment: .top) {
             Button {
-                withAnimation { expandedID = "" }
+                withAnimation { expandedID = ""; editing = nil }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -312,25 +308,42 @@ struct TodayView: View {
         .padding(.vertical, 4)
     }
 
+    // A set row, or the inline − / + editor when that set is being edited.
+    @ViewBuilder
     private func setRow(_ s: ExState, _ n: Int) -> some View {
+        if let e = editing, e.exercise.id == s.ex.id, e.setNumber == n {
+            InlineSetEditor(edit: e, units: units,
+                            onSave: { edit in withAnimation { editing = nil }; saveEdit(edit) },
+                            onRemove: { withAnimation { editing = nil; removeSet(s.ex, n) } },
+                            onCancel: { withAnimation { editing = nil } })
+                .id(e.id)
+                .listRowBackground(Color(.secondarySystemGroupedBackground))
+        } else {
+            setButtonRow(s, n)
+        }
+    }
+
+    private func setButtonRow(_ s: ExState, _ n: Int) -> some View {
         let log = s.logged[n]
         let sug = suggestion(s, n)
         let value: String = log.map { setText($0.weightKg, $0.reps) } ?? (sug.known ? setText(sug.kg, sug.reps) : "Tap to enter")
         return Button {
             if let log {
-                editing = SetEdit(exercise: s.ex, setNumber: n, weight: displayWeight(log.weightKg),
-                                  reps: log.reps, isLogged: true)
+                withAnimation {
+                    editing = SetEdit(exercise: s.ex, setNumber: n, weight: displayWeight(log.weightKg),
+                                      reps: log.reps, isLogged: true)
+                }
             } else if sug.known {
                 logSet(s.ex, n, kg: sug.kg, reps: sug.reps)
             } else {
                 // First time: nothing to copy yet, so ask for the numbers.
-                editing = SetEdit(exercise: s.ex, setNumber: n, weight: displayWeight(sug.kg),
-                                  reps: sug.reps, isLogged: false)
+                withAnimation {
+                    editing = SetEdit(exercise: s.ex, setNumber: n, weight: displayWeight(sug.kg),
+                                      reps: sug.reps, isLogged: false)
+                }
             }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: log != nil ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(log != nil ? Tone.check : Color.secondary.opacity(0.6))
                 Text("Set \(n)")
                     .foregroundStyle(log != nil ? Tone.ink : Color.secondary)
                 Spacer()
@@ -543,7 +556,7 @@ struct TodayView: View {
         let partners = PlanTemplate.supersetGroup(of: ex, in: workout)
         let next = partners.first { $0.id != ex.id && !state(for: $0).done }
             ?? workout.exercises.first { $0.id != ex.id && !state(for: $0).done }
-        withAnimation { expandedID = next?.id ?? "" }
+        withAnimation { expandedID = next?.id ?? ""; editing = nil }
     }
 
     // MARK: - Formatting
@@ -568,7 +581,7 @@ private enum Tone {
     static let ink   = Color(red: 0.110, green: 0.098, blue: 0.090) // #1C1917
 }
 
-// MARK: - Set editor (− / + for weight and reps)
+// MARK: - Inline set editor (− / + for weight and reps)
 
 struct SetEdit: Identifiable {
     let exercise: ExerciseTemplate
@@ -579,55 +592,65 @@ struct SetEdit: Identifiable {
     var id: String { "\(exercise.id)-\(setNumber)" }
 }
 
-struct SetEditor: View {
+// Shown in place of a set row while you change it.
+struct InlineSetEditor: View {
     @State var edit: SetEdit
     let units: UnitSystem
     let onSave: (SetEdit) -> Void
-    let onDelete: () -> Void
-    @Environment(\.dismiss) private var dismiss
+    let onRemove: () -> Void
+    let onCancel: () -> Void
 
     private var step: Double { units == .imperial ? 5 : 2.5 }
+    private let ink = Color(red: 0.110, green: 0.098, blue: 0.090)
 
     var body: some View {
-        VStack(spacing: 20) {
-            Text("\(edit.exercise.name) · Set \(edit.setNumber)").font(.headline)
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Set \(edit.setNumber)").font(.subheadline.weight(.semibold))
 
-            stepperRow(value: edit.weight == 0 ? "BW" : weightText, label: edit.weight == 0 ? "bodyweight" : units.label,
+            stepperRow(title: "Weight",
+                       value: edit.weight == 0 ? "BW" : "\(weightText) \(units.label)",
                        minus: { edit.weight = max(0, edit.weight - step) },
                        plus: { edit.weight += step })
-            stepperRow(value: "\(edit.reps)", label: "reps",
+            stepperRow(title: "Reps",
+                       value: "\(edit.reps)",
                        minus: { edit.reps = max(0, edit.reps - 1) },
                        plus: { edit.reps += 1 })
 
-            HStack {
+            HStack(spacing: 16) {
                 if edit.isLogged {
-                    Button("Remove set", role: .destructive) { onDelete(); dismiss() }
+                    Button("Remove", role: .destructive, action: onRemove)
+                        .buttonStyle(.borderless)
                 }
                 Spacer()
-                Button(edit.isLogged ? "Save" : "Log set") { onSave(edit); dismiss() }
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                Button(edit.isLogged ? "Save" : "Log set") { onSave(edit) }
                     .buttonStyle(.borderedProminent)
-                    .tint(Color(red: 0.110, green: 0.098, blue: 0.090))
+                    .tint(ink)
             }
+            .font(.subheadline)
         }
-        .padding(24)
+        .padding(.leading, 8)
+        .padding(.vertical, 6)
     }
 
     private var weightText: String {
         edit.weight == edit.weight.rounded() ? String(Int(edit.weight)) : String(format: "%.1f", edit.weight)
     }
 
-    private func stepperRow(value: String, label: String, minus: @escaping () -> Void, plus: @escaping () -> Void) -> some View {
-        HStack {
-            Button(action: minus) { Image(systemName: "minus").frame(width: 44, height: 36) }
+    private func stepperRow(title: String, value: String,
+                            minus: @escaping () -> Void, plus: @escaping () -> Void) -> some View {
+        HStack(spacing: 10) {
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            Spacer()
+            Button(action: minus) { Image(systemName: "minus").frame(width: 28, height: 22) }
                 .buttonStyle(.bordered)
                 .buttonRepeatBehavior(.enabled)
-            Spacer()
-            VStack(spacing: 2) {
-                Text(value).font(.title2.bold()).monospacedDigit()
-                Text(label).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Button(action: plus) { Image(systemName: "plus").frame(width: 44, height: 36) }
+            Text(value)
+                .font(.headline).monospacedDigit()
+                .frame(minWidth: 64)
+            Button(action: plus) { Image(systemName: "plus").frame(width: 28, height: 22) }
                 .buttonStyle(.bordered)
                 .buttonRepeatBehavior(.enabled)
         }
