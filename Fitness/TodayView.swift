@@ -233,13 +233,18 @@ struct TodayView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s) }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
     }
 
-    private func removeButton(_ s: ExState) -> some View {
+    // Swipe shows just the trash icon (VoiceOver still reads "Remove from today"); the long-press menu keeps the text.
+    private func removeButton(_ s: ExState, iconOnly: Bool = false) -> some View {
         Button { requestRemove(s) } label: {
-            Label("Remove from today", systemImage: "trash")
+            if iconOnly {
+                Image(systemName: "trash").accessibilityLabel("Remove from today")
+            } else {
+                Label("Remove from today", systemImage: "trash")
+            }
         }
         .tint(.red)
     }
@@ -275,7 +280,7 @@ struct TodayView: View {
             }
         }
         .padding(.vertical, 4)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s) }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
 
         ForEach(0..<s.count, id: \.self) { i in
