@@ -767,6 +767,7 @@ struct CatalogDetailView: View {
 
     var body: some View {
         Form {
+            Section { ExerciseVideoView(file: exercise.video) }
             Section("How to") {
                 ForEach(Array(exercise.steps.enumerated()), id: \.offset) { i, step in
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -900,8 +901,26 @@ struct ExerciseHowToView: View {
 
     var body: some View {
         Form {
+            if let file = ExerciseCatalog.videoFile(for: exercise.id) {
+                Section { ExerciseVideoView(file: file) }
+            }
             if let info = ExerciseLibrary.info(for: exercise.id) {
-                Section { HowToCarousel(info: info) }
+                if ExerciseCatalog.videoFile(for: exercise.id) == nil {
+                    Section { HowToCarousel(info: info) }   // no video for this one (hip thrust)
+                } else {
+                    Section("How to") {
+                        ForEach(Array(info.steps.enumerated()), id: \.offset) { i, step in
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Text("\(i + 1)").font(.subheadline.bold()).monospacedDigit()
+                                Text(step)
+                            }
+                        }
+                        Text("Avoid: \(info.avoid)").font(.footnote).foregroundStyle(.secondary)
+                    }
+                    Section("Muscles") {
+                        Text(info.muscles.joined(separator: " · "))
+                    }
+                }
             } else if let c = ExerciseCatalog.exercise(id: exercise.id) {
                 Section("How to") {
                     ForEach(Array(c.steps.enumerated()), id: \.offset) { i, step in
