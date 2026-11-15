@@ -34,7 +34,6 @@ struct TodayView: View {
     private var dayEdit: DayEdit { PlanTemplate.edits(from: editsRaw)[editKey] ?? DayEdit() }
     // What you're doing today: the plan with today's removals/additions. The plan itself is untouched.
     private var workout: WorkoutTemplate { PlanTemplate.applying(dayEdit, to: planned) }
-    private var isSwapped: Bool { workout.id != scheduled.id }
 
     // Picking the scheduled workout clears the override.
     private var selectedID: Binding<String> {
@@ -60,16 +59,6 @@ struct TodayView: View {
                     .pickerStyle(.segmented)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
-                } footer: {
-                    if isSwapped {
-                        HStack {
-                            Text("Swapped for today · scheduled was \(scheduled.id)")
-                            Spacer()
-                            Button("Undo") { overrideRaw = "" }.font(.footnote.bold())
-                        }
-                    } else {
-                        Text("Scheduled for today · tap A, B or C to swap")
-                    }
                 }
 
                 Section {
