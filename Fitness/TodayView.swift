@@ -83,9 +83,7 @@ struct TodayView: View {
                             .foregroundStyle(Color.primary)
                     }
                 } footer: {
-                    if dayEdit.isEmpty {
-                        Text("Swipe left on an exercise to remove it. Changes are for today only — your plan stays the same.")
-                    } else {
+                    if !dayEdit.isEmpty {
                         HStack {
                             Text(editSummary)
                             Spacer()
