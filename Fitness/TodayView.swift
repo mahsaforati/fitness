@@ -72,11 +72,13 @@ struct TodayView: View {
         }
     }
 
+    private func openWorkouts() { showingWorkouts = true }
+
     private func headerSection(done: Int, total: Int) -> some View {
-        Section {
-            WorkoutHeader(title: workout.title, done: done, total: total,
-                          showWorkouts: { showingWorkouts = true },
-                          startOver: clearTodaysSets)
+        let header = WorkoutHeader(title: workout.title, done: done, total: total,
+                                   showWorkouts: openWorkouts, startOver: clearTodaysSets)
+        return Section {
+            header
                 .listRowBackground(Color.clear)
                 // Its own alignment, separate from the exercises: 12pt in from the card edges on both sides.
                 .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
@@ -252,52 +254,76 @@ struct TodayView: View {
     // The open exercise: a header row, the logged sets, then Log (first set) or Repeat / Add.
     @ViewBuilder
     private func expandedRows(_ s: ExState) -> some View {
+        exerciseHeader(s)
+        setsArea(s)
+    }
+
+    private func exerciseHeader(_ s: ExState) -> some View {
         HStack(alignment: .top) {
             Button {
                 withAnimation { expandedID = ""; editing = nil }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
-                    }
+                    Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
                     Text(planLine(s)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
-
-            if ExerciseLibrary.info(for: s.ex.id) != nil || ExerciseCatalog.exercise(id: s.ex.id) != nil {
-                Button { path.append(s.ex) } label: {
-                    Text("How")
-                        .font(.footnote.bold())
-                        .foregroundStyle(Color.primary)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Capsule().fill(Color(.systemGray5)))
-                }
-                .buttonStyle(.borderless)
-            }
+            howButton(s)
         }
         .padding(.vertical, 4)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
+    }
 
-        // Before the first set: one pre-filled set with a Log button.
-        // After that: the sets you've logged, then Repeat (same numbers again) and Add (a new set to change).
-        let loggedNumbers = s.logged.keys.sorted()
-        let next = (loggedNumbers.last ?? 0) + 1
+    @ViewBuilder
+    private func howButton(_ s: ExState) -> some View {
+        if ExerciseLibrary.info(for: s.ex.id) != nil || ExerciseCatalog.exercise(id: s.ex.id) != nil {
+            Button { path.append(s.ex) } label: {
+                Text("How")
+                    .font(.footnote.bold())
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .background(Capsule().fill(Color(.systemGray5)))
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    // Before the first set: one pre-filled set with a Log button.
+    // After that: the sets you've logged, then Repeat (same numbers again) and Add (a new set to change).
+    @ViewBuilder
+    private func setsArea(_ s: ExState) -> some View {
+        let loggedNumbers: [Int] = s.logged.keys.sorted()
         ForEach(loggedNumbers, id: \.self) { n in
             setRow(s, n)
         }
+        restLine(for: s)
+        nextAction(s, next: (loggedNumbers.last ?? 0) + 1, firstSet: loggedNumbers.isEmpty)
+    }
+
+    @ViewBuilder
+    private func restLine(for s: ExState) -> some View {
         if let end = restEnd, restFor == s.ex.id {
             RestLine(end: end, total: restTotal,
-                     add: { restEnd = end.addingTimeInterval(10); restTotal += 10 },
+                     add: { addRest(to: end) },
                      skip: { withAnimation { restEnd = nil } })
                 .transition(.opacity)
         }
+    }
+
+    private func addRest(to end: Date) {
+        restEnd = end.addingTimeInterval(10)
+        restTotal += 10
+    }
+
+    @ViewBuilder
+    private func nextAction(_ s: ExState, next: Int, firstSet: Bool) -> some View {
         if let e = editing, e.exercise.id == s.ex.id, e.setNumber == next {
             setRow(s, next)   // editing a new set (from Add, or changing the first set before logging it)
-        } else if loggedNumbers.isEmpty {
+        } else if firstSet {
             firstSetRow(s)
         } else {
             repeatAddRow(s, next)
@@ -308,38 +334,70 @@ struct TodayView: View {
     // then a light grey Log button.
     private func firstSetRow(_ s: ExState) -> some View {
         let sug = suggestion(s, 1)
-        let id = s.ex.id
-        let w = drafts[id]?.weight ?? displayWeight(sug.kg)
-        let r = drafts[id]?.reps ?? sug.reps
-        let step: Double = units == .imperial ? 5 : 2.5
+        let id: String = s.ex.id
+        let w: Double = drafts[id]?.weight ?? displayWeight(sug.kg)
+        let r: Int = drafts[id]?.reps ?? sug.reps
         return HStack(spacing: 4) {
-            miniButton("minus", label: "Less weight") { drafts[id] = Draft(weight: max(0, w - step), reps: r) }
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(w > 0 ? format(units.toKg(w)) : "BW")
-                    .font(.body.weight(.semibold)).monospacedDigit()
-                if w > 0 { Text(units.label).font(.caption).foregroundStyle(.secondary) }
-            }
-            .frame(minWidth: 44)
-            miniButton("plus", label: "More weight") { drafts[id] = Draft(weight: w + step, reps: r) }
+            weightControl(id: id, weight: w, reps: r)
             Text("×").foregroundStyle(.secondary)
-            miniButton("minus", label: "Fewer reps") { drafts[id] = Draft(weight: w, reps: max(1, r - 1)) }
-            Text("\(r)")
+            repsControl(id: id, weight: w, reps: r)
+            Spacer(minLength: 4)
+            logButton(s, weight: w, reps: r)
+        }
+    }
+
+    private var weightStep: Double { units == .imperial ? 5 : 2.5 }
+
+    private func weightControl(id: String, weight w: Double, reps r: Int) -> some View {
+        HStack(spacing: 4) {
+            miniButton("minus", label: "Less weight") {
+                drafts[id] = Draft(weight: max(0, w - weightStep), reps: r)
+            }
+            weightText(w).frame(minWidth: 44)
+            miniButton("plus", label: "More weight") {
+                drafts[id] = Draft(weight: w + weightStep, reps: r)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func weightText(_ w: Double) -> some View {
+        if w > 0 {
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(format(units.toKg(w))).font(.body.weight(.semibold)).monospacedDigit()
+                Text(units.label).font(.caption).foregroundStyle(.secondary)
+            }
+        } else {
+            Text("BW").font(.body.weight(.semibold))
+        }
+    }
+
+    private func repsControl(id: String, weight w: Double, reps r: Int) -> some View {
+        HStack(spacing: 4) {
+            miniButton("minus", label: "Fewer reps") {
+                drafts[id] = Draft(weight: w, reps: max(1, r - 1))
+            }
+            Text(String(r))
                 .font(.body.weight(.semibold)).monospacedDigit()
                 .frame(minWidth: 22)
-            miniButton("plus", label: "More reps") { drafts[id] = Draft(weight: w, reps: r + 1) }
-            Spacer(minLength: 4)
-            Button {
-                logSet(s.ex, 1, kg: units.toKg(w), reps: r)
-                drafts[id] = nil
-            } label: {
-                Text("Log")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Tone.ink)
-                    .padding(.horizontal, 16).padding(.vertical, 7)
-                    .background(Capsule().fill(Color(.systemGray5)))
+            miniButton("plus", label: "More reps") {
+                drafts[id] = Draft(weight: w, reps: r + 1)
             }
-            .buttonStyle(.borderless)
         }
+    }
+
+    private func logButton(_ s: ExState, weight w: Double, reps r: Int) -> some View {
+        Button {
+            logSet(s.ex, 1, kg: units.toKg(w), reps: r)
+            drafts[s.ex.id] = nil
+        } label: {
+            Text("Log")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Tone.ink)
+                .padding(.horizontal, 16).padding(.vertical, 7)
+                .background(Capsule().fill(Color(.systemGray5)))
+        }
+        .buttonStyle(.borderless)
     }
 
     private func miniButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
@@ -926,6 +984,15 @@ private struct WorkoutHeader: View {
     let startOver: () -> Void    // ▶ after ending: clear today's sets for this workout
     @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32   // a bit larger than .title (28)
 
+    init(title: String, done: Int, total: Int,
+         showWorkouts: @escaping () -> Void, startOver: @escaping () -> Void) {
+        self.title = title
+        self.done = done
+        self.total = total
+        self.showWorkouts = showWorkouts
+        self.startOver = startOver
+    }
+
     @AppStorage("workoutTimerStart") private var startedAt = 0.0      // when it was last started; 0 = not running
     @AppStorage("workoutTimerElapsed") private var elapsed = 0.0      // seconds banked before the last start
     @AppStorage("workoutTimerDay") private var day = ""               // day the timer belongs to
@@ -945,52 +1012,8 @@ private struct WorkoutHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // "Workout A" with "Lower body" underneath; ▶ Start and the dumbbell at the end of the line.
-            HStack(alignment: .center, spacing: 8) {
-                let parts = title.components(separatedBy: " · ")
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(parts[0])
-                        .font(.system(size: titleSize, weight: .bold))
-                        .foregroundStyle(Tone.ink)
-                        .lineLimit(1)
-                    if parts.count > 1 {
-                        Text(parts.dropFirst().joined(separator: " · "))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-                }
-                Spacer(minLength: 0)
-                if !inProgress {
-                    roundButton("play.fill", label: "Start workout") {
-                        if finished { startOver() }   // after ending: back to the original state, no question
-                        start()
-                    }
-                        .transition(.opacity.combined(with: .scale))
-                }
-                roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
-            }
-            .padding(.top, 8)
-
-            if inProgress {
-                // Running or paused: the bar with the time, then pause/resume and stop.
-                HStack(spacing: 8) {
-                    bar
-                    roundButton(running ? "pause.fill" : "play.fill",
-                                label: running ? "Pause workout timer" : "Resume workout timer",
-                                action: togglePause)
-                    roundButton("stop.fill", label: "Stop workout") { confirmingStop = true }
-                }
-                .padding(.top, 12)
-                .transition(.opacity)
-            } else if finished && total > 0 && done >= total {
-                // Stopped after finishing every exercise.
-                Label("Done in \(format(elapsed))", systemImage: "checkmark")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Tone.check)
-                    .padding(.top, 6)
-            }
+            titleLine
+            belowTitle
         }
         .onAppear(perform: newDayCheck)
         .confirmationDialog("End this workout?", isPresented: $confirmingStop, titleVisibility: .visible) {
@@ -998,6 +1021,87 @@ private struct WorkoutHeader: View {
         } message: {
             Text("The timer stops at its current time. Your logged sets stay as they are.")
         }
+    }
+
+    // "Workout A" with "Lower body" underneath; ▶ Start and the dumbbell at the end of the line.
+    private var titleLine: some View {
+        HStack(alignment: .center, spacing: 8) {
+            titleTexts
+            Spacer(minLength: 0)
+            startButton
+            roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
+        }
+        .padding(.top, 8)
+    }
+
+    private var titleParts: [String] { title.components(separatedBy: " · ") }
+
+    private var titleTexts: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(titleParts.first ?? title)
+                .font(.system(size: titleSize, weight: .bold))
+                .foregroundStyle(Tone.ink)
+                .lineLimit(1)
+            focusText
+        }
+    }
+
+    @ViewBuilder
+    private var focusText: some View {
+        if titleParts.count > 1 {
+            Text(titleParts.dropFirst().joined(separator: " · "))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+    }
+
+    @ViewBuilder
+    private var startButton: some View {
+        if !inProgress {
+            roundButton("play.fill", label: "Start workout", action: tapStart)
+                .transition(.opacity.combined(with: .scale))
+        }
+    }
+
+    private func tapStart() {
+        if finished { startOver() }   // after ending: back to the original state, no question
+        start()
+    }
+
+    @ViewBuilder
+    private var belowTitle: some View {
+        if inProgress {
+            progressLine
+        } else if finished && total > 0 && done >= total {
+            // Stopped after finishing every exercise.
+            Label("Done in \(format(elapsed))", systemImage: "checkmark")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Tone.check)
+                .padding(.top, 6)
+        }
+    }
+
+    // Running or paused: the bar with the time, then pause/resume and stop.
+    private var progressLine: some View {
+        HStack(spacing: 8) {
+            bar
+            roundButton(running ? "pause.fill" : "play.fill",
+                        label: running ? "Pause workout timer" : "Resume workout timer",
+                        action: togglePause)
+            roundButton("stop.fill", label: "Stop workout", action: askStop)
+        }
+        .padding(.top, 12)
+        .transition(.opacity)
+    }
+
+    private func askStop() { confirmingStop = true }
+
+    private var barLabel: String {
+        let count = "\(done) of \(total)"
+        if finished { return "Finished · " + count }
+        return running ? count : "Paused · " + count
     }
 
     // Grey circle button, the same style for ▶, the dumbbell, pause and stop.
@@ -1020,12 +1124,10 @@ private struct WorkoutHeader: View {
                 Capsule().fill(Self.track)
                 GeometryReader { geo in
                     Capsule().fill(Self.sageFill)
-                        .frame(width: total > 0 && done > 0
-                               ? max(34, geo.size.width * CGFloat(done) / CGFloat(total)) : 0)
+                        .frame(width: fillWidth(geo.size.width))
                 }
                 HStack {
-                    Text(finished ? "Finished · \(done) of \(total)"
-                         : running ? "\(done) of \(total)" : "Paused · \(done) of \(total)")
+                    Text(barLabel)
                         .foregroundStyle(Self.stone)
                     Spacer()
                     Text(format(totalTime(at: ctx.date)))
@@ -1044,6 +1146,12 @@ private struct WorkoutHeader: View {
             Button("Start over", systemImage: "arrow.counterclockwise", role: .destructive, action: reset)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private func fillWidth(_ full: CGFloat) -> CGFloat {
+        guard total > 0, done > 0 else { return 0 }
+        let fraction = CGFloat(done) / CGFloat(total)
+        return max(34, full * fraction)
     }
 
     private func totalTime(at date: Date) -> TimeInterval {
