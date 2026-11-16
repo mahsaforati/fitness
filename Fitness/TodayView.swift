@@ -1247,6 +1247,115 @@ private struct RestLine: View {
     }
 }
 
+// MARK: - Your workouts (browse A, B, C with a preview; swap today's workout)
+
+private struct WorkoutsSheet: View {
+    let todayID: String
+    let scheduledID: String
+    let onPick: (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(PlanTemplate.phase1) { w in
+                    Section {
+                        NavigationLink(value: w.id) { card(w) }
+                    }
+                }
+            }
+            .navigationTitle("Your workouts")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: String.self) { id in
+                if let w = PlanTemplate.workout(id: id) {
+                    WorkoutPreview(workout: w, isToday: w.id == todayID, isScheduled: w.id == scheduledID) {
+                        onPick(w.id)
+                        dismiss()
+                    }
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+    }
+
+    // Title, a badge for today / scheduled, then a short preview of the exercises.
+    private func card(_ w: WorkoutTemplate) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(w.title).font(.headline)
+                Spacer()
+                if w.id == todayID { badge("Today") }
+                else if w.id == scheduledID { badge("Scheduled") }
+            }
+            Text("\(w.exercises.count) exercises · \(w.exercises.reduce(0) { $0 + $1.sets }) sets")
+                .font(.caption).foregroundStyle(.secondary)
+            Text(w.exercises.map(\.name).joined(separator: " · "))
+                .font(.footnote).foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func badge(_ text: String) -> some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(Tone.check)
+            .padding(.horizontal, 8).padding(.vertical, 3)
+            .background(Capsule().fill(Tone.done))
+    }
+}
+
+private struct WorkoutPreview: View {
+    let workout: WorkoutTemplate
+    let isToday: Bool
+    let isScheduled: Bool
+    let onPick: () -> Void
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(workout.exercises) { ex in
+                    NavigationLink {
+                        ExerciseHowToView(exercise: ex)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(ex.name).font(.subheadline.weight(.semibold))
+                            Text("\(ex.sets) × \(ex.reps)" + (ex.superset != nil ? " · superset" : ""))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            } footer: {
+                Text("Tap an exercise to see how to do it.")
+            }
+        }
+        .navigationTitle(workout.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom) {
+            if isToday {
+                Label("This is today's workout", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Tone.check)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Capsule().fill(Tone.done))
+                    .padding(.horizontal).padding(.bottom, 8)
+            } else {
+                Button(action: onPick) {
+                    Text(isScheduled ? "Go back to the scheduled workout" : "Do this workout today")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(Capsule().fill(Color(red: 0.478, green: 0.545, blue: 0.455)))
+                }
+                .buttonStyle(.borderless)
+                .padding(.horizontal).padding(.bottom, 8)
+            }
+        }
+    }
+}
+
 // MARK: - How-to page
 
 struct ExerciseHowToView: View {
