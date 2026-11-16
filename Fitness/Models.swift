@@ -41,3 +41,55 @@ final class SetLog {
         self.reps = reps
     }
 }
+
+// MARK: - Workout focus, worked out from the exercises
+// Each exercise counts as lower body, upper body or core. The focus is:
+//   mostly one region → "Lower body" / "Upper body" (plus "+ core" if there's any core work),
+//   a real mix of upper and lower (the smaller side at least a third) → "Full body",
+//   only core → "Core", nothing recognisable → "Mixed".
+// The stored title keeps just the name ("Workout A"); older titles like "Workout A · Lower body"
+// still work because only the part before " · " is used as the name.
+
+enum BodyRegion { case lower, upper, core, other }
+
+extension ExerciseTemplate {
+    var region: BodyRegion {
+        switch id {
+        case "goblet-squat", "db-rdl", "reverse-lunge", "glute-bridge", "lateral-walk",
+             "db-deadlift", "step-up", "hip-thrust":
+            return .lower
+        case "db-bench", "one-arm-row", "seated-press", "rear-delt-fly", "push-up",
+             "chest-row", "arnold-press":
+            return .upper
+        case "dead-bug", "plank", "side-plank":
+            return .core
+        default:
+            switch ExerciseCatalog.exercise(id: id)?.bodyPart {
+            case "upper legs", "lower legs": return .lower
+            case "chest", "back", "shoulders", "upper arms", "lower arms", "neck": return .upper
+            case "waist": return .core
+            default: return .other
+            }
+        }
+    }
+}
+
+extension WorkoutTemplate {
+    // "Workout A" — the editable part of the title.
+    var name: String { title.components(separatedBy: " · ").first ?? title }
+
+    var focus: String {
+        let regions = exercises.map(\.region)
+        let lower = regions.filter { $0 == .lower }.count
+        let upper = regions.filter { $0 == .upper }.count
+        let core = regions.filter { $0 == .core }.count
+        if lower + upper == 0 { return core > 0 ? "Core" : (exercises.isEmpty ? "No exercises yet" : "Mixed") }
+        let smaller = Double(min(lower, upper)), both = Double(lower + upper)
+        if smaller / both >= 1.0 / 3.0 { return "Full body" }
+        let main = lower >= upper ? "Lower body" : "Upper body"
+        return core > 0 ? main + " + core" : main
+    }
+
+    // "Workout A · Lower body + core"
+    var displayTitle: String { "\(name) · \(focus)" }
+}

@@ -78,7 +78,7 @@ struct TodayView: View {
     private func openWorkouts() { showingWorkouts = true }
 
     private func headerSection(done: Int, total: Int) -> some View {
-        let header = WorkoutHeader(title: workout.title, done: done, total: total,
+        let header = WorkoutHeader(title: workout.displayTitle, done: done, total: total,
                                    showWorkouts: openWorkouts, startOver: clearTodaysSets)
         return Section {
             header
@@ -114,7 +114,7 @@ struct TodayView: View {
     }
 
     private func withNavigation<V: View>(_ v: V) -> some View {
-        v.navigationTitle(workout.title)          // used for the back button on pushed pages
+        v.navigationTitle(workout.name)           // used for the back button on pushed pages
             .toolbar(.hidden, for: .navigationBar)   // Today draws its own title row
             .navigationDestination(for: ExerciseTemplate.self) { ExerciseHowToView(exercise: $0) }
             .sheet(isPresented: $showingWorkouts) {
@@ -1121,7 +1121,7 @@ struct AddExerciseSheet: View {   // also used by the Plan tab's workout editor
                     ForEach(PlanTemplate.phase1) { w in
                         let options = planOptions(w)
                         if !options.isEmpty {
-                            Section("Your plan · \(w.title)") {
+                            Section("Your plan · \(w.displayTitle)") {
                                 ForEach(options) { ex in
                                     Button { add(ex) } label: {
                                         row(ex.name, "\(ex.sets) × \(ex.reps)")
@@ -1546,7 +1546,7 @@ private struct WorkoutsSheet: View {
     // Title, then a short preview of the exercises.
     private func card(_ w: WorkoutTemplate) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(w.title).font(.headline)
+            Text(w.displayTitle).font(.headline)
             Text("\(w.exercises.count) exercises · \(w.exercises.reduce(0) { $0 + $1.sets }) sets")
                 .font(.caption).foregroundStyle(.secondary)
             Text(w.exercises.map(\.name).joined(separator: " · "))
@@ -1582,7 +1582,7 @@ private struct WorkoutPreview: View {
                 Text("Tap an exercise to see how to do it.")
             }
         }
-        .navigationTitle(workout.title)
+        .navigationTitle(workout.displayTitle)
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
             Button(action: onPick) {

@@ -24,7 +24,7 @@ struct PlanView: View {
                     ForEach(workouts) { w in
                         NavigationLink(value: w.id) {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(w.title).font(.headline)
+                                Text(w.displayTitle).font(.headline)
                                 Text("\(w.exercises.count) exercises · \(w.exercises.reduce(0) { $0 + $1.sets }) sets")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
@@ -92,6 +92,12 @@ struct WorkoutTemplateEditor: View {
     private var shown: WorkoutTemplate? { draft ?? saved }
     private var isEditing: Bool { draft != nil }
 
+    // Edits the name only ("Workout A"); the focus isn't typed, it comes from the exercises.
+    private var nameBinding: Binding<String> {
+        Binding(get: { draftBinding.wrappedValue.name },
+                set: { draftBinding.wrappedValue.title = $0 })
+    }
+
     private var draftBinding: Binding<WorkoutTemplate> {
         Binding(get: { draft ?? saved ?? WorkoutTemplate(id: workoutID, title: "", exercises: []) },
                 set: { draft = $0 })
@@ -100,8 +106,16 @@ struct WorkoutTemplateEditor: View {
     var body: some View {
         List {
             if isEditing {
-                Section("Name") {
-                    TextField("Workout name", text: draftBinding.title)
+                Section {
+                    TextField("Workout name", text: nameBinding)
+                } header: {
+                    Text("Name")
+                } footer: {
+                    Text("Focus: \(draftBinding.wrappedValue.focus) — worked out from the exercises.")
+                }
+            } else if let w = saved {
+                Section {
+                    LabeledContent("Focus", value: w.focus)
                 }
             }
             Section {
@@ -123,14 +137,14 @@ struct WorkoutTemplateEditor: View {
             }
         }
         .onAppear(perform: startNewIfNeeded)
-        .confirmationDialog("Delete \(saved?.title ?? "this workout")?", isPresented: $confirmingDelete,
+        .confirmationDialog("Delete \(saved?.name ?? "this workout")?", isPresented: $confirmingDelete,
                             titleVisibility: .visible) {
             Button("Delete workout", role: .destructive, action: deleteWorkout)
         } message: {
             Text("It's removed from your plan. Sets you've already logged are kept.")
         }
         .environment(\.editMode, $editMode)
-        .navigationTitle(shown?.title ?? "Workout")
+        .navigationTitle(shown?.name ?? "Workout")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isEditing)
         .toolbar { toolbarContent }
@@ -221,8 +235,9 @@ struct WorkoutTemplateEditor: View {
 
     private func save() {
         guard var edited = draft else { return }
-        edited.title = edited.title.trimmingCharacters(in: .whitespaces)
-        if edited.title.isEmpty { edited.title = saved?.title ?? "Workout \(workoutID)" }
+        // Store just the name; the focus is always worked out from the exercises.
+        edited.title = edited.name.trimmingCharacters(in: .whitespaces)
+        if edited.title.isEmpty { edited.title = saved?.name ?? "Workout \(workoutID)" }
         var all = workouts
         if let i = all.firstIndex(where: { $0.id == workoutID }) {
             all[i] = edited
