@@ -26,6 +26,7 @@ struct TodayView: View {
     @State private var pendingRemoval: ExerciseTemplate?
     @State private var confirmingReset = false
     @State private var showingWorkouts = false
+    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32   // a bit larger than .title (28); follows Dynamic Type
     // Shared with WorkoutHeader: picking another workout after finishing brings back its Start button.
     @AppStorage("workoutTimerFinished") private var timerFinished = false
     @AppStorage("workoutTimerStarted") private var timerStarted = false
@@ -55,7 +56,7 @@ struct TodayView: View {
                 let parts = workout.title.components(separatedBy: " · ")
                 VStack(alignment: .leading, spacing: 0) {
                     Text(parts[0])
-                        .font(.title.bold())
+                        .font(.system(size: titleSize, weight: .bold))
                         .foregroundStyle(Tone.ink)
                         .lineLimit(1)
                     if parts.count > 1 {
@@ -91,7 +92,8 @@ struct TodayView: View {
                 Section {
                     titleRow
                         .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                        // leading 20 = the list's standard row inset, so the title lines up with the exercise names
+                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 4))
                         .listRowSeparator(.hidden)
                     // Same section as the title so there's only a small gap between them.
                     WorkoutHeader(done: doneCount, total: states.count)
