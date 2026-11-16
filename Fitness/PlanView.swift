@@ -110,16 +110,16 @@ struct WorkoutTemplateEditor: View {
                     HStack(spacing: 8) {
                         // The field is as wide as the name itself (an invisible copy of the text sets
                         // the width), so the pencil sits right after the name.
-                        ZStack(alignment: .leading) {
-                            Text(nameBinding.wrappedValue.isEmpty ? "Workout name" : nameBinding.wrappedValue)
-                                .font(.title2.bold())
-                                .padding(.trailing, 4)
-                                .hidden()
-                            TextField("Workout name", text: nameBinding)
-                                .font(.title2.bold())
-                                .focused($nameFocused)
-                        }
-                        .fixedSize(horizontal: true, vertical: false)
+                        Text(nameBinding.wrappedValue.isEmpty ? "Workout name" : nameBinding.wrappedValue)
+                            .font(.title2.bold())
+                            .lineLimit(1)
+                            .padding(.trailing, 4)
+                            .hidden()
+                            .overlay(alignment: .leading) {
+                                TextField("Workout name", text: nameBinding)
+                                    .font(.title2.bold())
+                                    .focused($nameFocused)
+                            }
                         Image(systemName: "pencil")
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(.secondary)
