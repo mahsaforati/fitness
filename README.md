@@ -38,5 +38,5 @@ Requires iOS 17+.
 - **Auto start**: logging a set when the workout isn't running does what ▶ does: starts the timer and progress bar (resumes if paused; a new timer if it was stopped, keeping your sets)
 - **Edit your workouts** (Plan tab): tap a workout to see it; tap **Edit** to rename it, add / remove / drag to reorder exercises, and tap an exercise to change sets, reps (or time) and supersets. Nothing is saved until you tap **✓**; **✕** discards the changes. Saved on the iPhone; **Reset to the original plan** undoes all edits. Today and Calendar use your edited workouts
 - **New workout** (Plan tab): opens a blank workout (D, E…) in edit mode; add exercises and tap ✓ to save it (✕ discards it). It joins the rotation after the others. While editing a workout, **Delete workout** removes it (logged sets are kept)
-- **Settings** (⚙︎ top right of the Plan tab): units (lb / kg) and rest time between sets (15 s steps, 0:15–5:00; default 1:20)
+- **Settings** (⚙︎ top right of the Plan tab): units (lb / kg) and rest time between sets (10 s steps, 0:10–5:00; default 1:20)
 - **Workout focus** is worked out from the exercises (lower / upper / core): "Lower body", "Upper body" (+ core if there's core work), "Full body" when upper and lower are mixed, or "Core". You only edit the name ("Workout A"); the focus updates as exercises change

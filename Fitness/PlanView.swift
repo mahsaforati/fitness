@@ -361,24 +361,20 @@ struct SettingsView: View {
             Form {
                 Section("Units") {
                     Picker("Units", selection: $unitsRaw) {
-                        Text("Imperial (lb)").tag(UnitSystem.imperial.rawValue)
-                        Text("Metric (kg)").tag(UnitSystem.metric.rawValue)
+                        Text("Imperial").tag(UnitSystem.imperial.rawValue)
+                        Text("Metric").tag(UnitSystem.metric.rawValue)
                     }
                     .pickerStyle(.segmented)
                 }
-                Section {
-                    Stepper(value: $restSeconds, in: 15...300, step: 15) {
+                Section("Rest timer") {
+                    Stepper(value: $restSeconds, in: 10...300, step: 10) {
                         HStack {
                             Text("Rest between sets")
                             Spacer()
                             Text(clock(restSeconds)).monospacedDigit().foregroundStyle(.secondary)
                         }
                     }
-                } header: {
-                    Text("Rest timer")
-                } footer: {
-                    Text("Starts after each set (or each superset round). Change it in 15-second steps.")
-                }
+
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
