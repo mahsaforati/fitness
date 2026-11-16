@@ -2,7 +2,8 @@
 import Foundation
 
 enum PlanTemplate {
-    static let phase1: [WorkoutTemplate] = [
+    // The built-in plan. Your edits from the Plan tab are saved separately (see `phase1` below).
+    static let defaultPhase1: [WorkoutTemplate] = [
         WorkoutTemplate(id: "A", title: "Workout A · Lower body", exercises: [
             .init(id: "goblet-squat", name: "Goblet squat", sets: 3, reps: "10–12"),
             .init(id: "db-rdl", name: "Dumbbell Romanian deadlift", sets: 3, reps: "10–12"),
@@ -28,6 +29,28 @@ enum PlanTemplate {
             .init(id: "side-plank", name: "Side plank", sets: 3, reps: "20–30 s / side")
         ])
     ]
+
+    // MARK: Your editable templates
+    // The Plan tab can change each workout (name, exercises, order, sets, reps, supersets).
+    // Changes are saved on the iPhone as JSON; with none saved, the built-in plan is used.
+
+    static let templatesKey = "planTemplates"
+    private static var cache: (raw: String, value: [WorkoutTemplate])?
+
+    static var phase1: [WorkoutTemplate] { templates(from: UserDefaults.standard.string(forKey: templatesKey) ?? "") }
+
+    static func templates(from raw: String) -> [WorkoutTemplate] {
+        if let cache, cache.raw == raw { return cache.value }
+        let saved = raw.isEmpty ? nil : try? JSONDecoder().decode([WorkoutTemplate].self, from: Data(raw.utf8))
+        let value = (saved?.isEmpty == false ? saved : nil) ?? defaultPhase1
+        cache = (raw, value)
+        return value
+    }
+
+    static func encodeTemplates(_ workouts: [WorkoutTemplate]) -> String {
+        guard let data = try? JSONEncoder().encode(workouts) else { return "" }
+        return String(decoding: data, as: UTF8.self)
+    }
 
     // The other exercises in the same superset as `ex` (in plan order, including `ex`).
     static func supersetGroup(of ex: ExerciseTemplate, in workout: WorkoutTemplate) -> [ExerciseTemplate] {
@@ -97,10 +120,10 @@ extension PlanTemplate {
     static let editsKey = "todayEdits"
 
     // Every exercise in the plan, once each — what can be added to a day.
-    static let allExercises: [ExerciseTemplate] = {
+    static var allExercises: [ExerciseTemplate] {
         var seen = Set<String>()
         return phase1.flatMap(\.exercises).filter { seen.insert($0.id).inserted }
-    }()
+    }
 
     static func editKey(_ date: Date, _ workoutID: String) -> String { "\(dayKey(date))|\(workoutID)" }
 

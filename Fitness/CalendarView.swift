@@ -5,6 +5,7 @@ import SwiftData
 // Only days with logged sets get a letter (A/B/C); tap a day to see what was logged.
 struct CalendarView: View {
     @AppStorage("units") private var unitsRaw = UnitSystem.imperial.rawValue
+    @AppStorage(PlanTemplate.templatesKey) private var templatesRaw = ""   // redraw when the Plan tab edits a workout
     private var units: UnitSystem { UnitSystem(rawValue: unitsRaw) ?? .imperial }
     @Query(sort: \SetLog.date) private var logs: [SetLog]
 
@@ -184,7 +185,7 @@ private struct DayCard: View {
     let units: UnitSystem
     @AppStorage(PlanTemplate.editsKey) private var editsRaw = ""
 
-    private static let allExercises = PlanTemplate.phase1.flatMap(\.exercises)
+    private static var allExercises: [ExerciseTemplate] { PlanTemplate.phase1.flatMap(\.exercises) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

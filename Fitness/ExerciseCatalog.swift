@@ -4,7 +4,7 @@ import ImageIO
 
 // The big exercise list (1,324 exercises) you can add to a day from "Add exercise".
 // Text only (names, muscles, equipment, steps) from the exercises-dataset by Hasan Emir Yıldırım,
-// MIT License — https://github.com/hasaneyldrm/exercises-dataset (notice shown on the Plan tab).
+// MIT License — https://github.com/hasaneyldrm/exercises-dataset (full notice kept below in `licenseNotice`).
 // Exercise videos (GIFs) are © Gym visual — https://gymvisual.com/ — used under the owner's licence
 // (no on-screen credit required under that licence). The plan's videos are in the app (ExerciseVideos/);
 // the rest download the first time you open them and are kept on the phone.

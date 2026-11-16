@@ -9,20 +9,20 @@ enum UnitSystem: String, CaseIterable {
     func toKg(_ value: Double) -> Double { self == .imperial ? value / 2.20462 : value }
 }
 
-struct ExerciseTemplate: Identifiable, Hashable {
+struct ExerciseTemplate: Identifiable, Hashable, Codable {
     let id: String
-    let name: String
-    let sets: Int
-    let reps: String
+    var name: String
+    var sets: Int
+    var reps: String
     // Exercises next to each other with the same superset tag are done as a superset:
     // one set of each in turn, then rest. nil = a normal straight-sets exercise.
     var superset: String? = nil
 }
 
-struct WorkoutTemplate: Identifiable {
+struct WorkoutTemplate: Identifiable, Hashable, Codable {
     let id: String
-    let title: String
-    let exercises: [ExerciseTemplate]
+    var title: String
+    var exercises: [ExerciseTemplate]
 }
 
 @Model

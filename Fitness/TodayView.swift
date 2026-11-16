@@ -10,6 +10,7 @@ struct TodayView: View {
     @AppStorage("units") private var unitsRaw = UnitSystem.imperial.rawValue
     private var units: UnitSystem { UnitSystem(rawValue: unitsRaw) ?? .imperial }
     @AppStorage(PlanTemplate.overrideKey) private var overrideRaw = ""
+    @AppStorage(PlanTemplate.templatesKey) private var templatesRaw = ""   // redraw when the Plan tab edits a workout
     @AppStorage("restSeconds") private var restSeconds = 80   // 1:20
     @AppStorage(PlanTemplate.editsKey) private var editsRaw = ""   // today's added/removed exercises
     @Environment(\.modelContext) private var context
@@ -1066,9 +1067,14 @@ struct InlineSetEditor: View {
 
 // MARK: - Add an exercise to today
 
-private struct AddExerciseSheet: View {
+struct AddExerciseSheet: View {   // also used by the Plan tab's workout editor
     let current: Set<String>                  // exercises already in today's list
     let onAdd: (ExerciseTemplate) -> Void
+
+    init(current: Set<String>, onAdd: @escaping (ExerciseTemplate) -> Void) {
+        self.current = current
+        self.onAdd = onAdd
+    }
     @Environment(\.dismiss) private var dismiss
 
     @State private var query = ""
