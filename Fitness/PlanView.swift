@@ -359,12 +359,14 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Units") {
-                    Picker("Units", selection: $unitsRaw) {
-                        Text("Imperial").tag(UnitSystem.imperial.rawValue)
-                        Text("Metric").tag(UnitSystem.metric.rawValue)
+                Section {
+                    // Plain text choice: the selected one in bold, the other in grey — no pill or circle.
+                    HStack(spacing: 18) {
+                        Text("Units")
+                        Spacer()
+                        unitChoice("Imperial", UnitSystem.imperial)
+                        unitChoice("Metric", UnitSystem.metric)
                     }
-                    .pickerStyle(.segmented)
                 }
                 Section("Rest timer") {
                     PlainStepper(title: "Rest between sets", value: $restSeconds,
@@ -380,6 +382,15 @@ struct SettingsView: View {
     }
 
     private func clock(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
+
+    private func unitChoice(_ label: String, _ unit: UnitSystem) -> some View {
+        let selected = unitsRaw == unit.rawValue
+        return Button(label) { unitsRaw = unit.rawValue }
+            .buttonStyle(.borderless)
+            .font(.body.weight(selected ? .semibold : .regular))
+            .foregroundStyle(selected ? Color.primary : Color.secondary)
+            .accessibilityAddTraits(selected ? .isSelected : [])
+    }
 }
 
 // A row with a label, then plain − value + (no grey control), like the − / + on Today.
