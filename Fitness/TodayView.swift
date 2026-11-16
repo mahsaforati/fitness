@@ -880,7 +880,6 @@ private struct WorkoutHeader: View {
     @AppStorage("workoutTimerStarted") private var started = false    // pressed Start today
     @AppStorage("workoutTimerFinished") private var finished = false  // pressed Stop today
     @State private var confirmingStop = false
-    @State private var confirmingStartOver = false
 
     private var running: Bool { startedAt > 0 }
 
@@ -913,7 +912,8 @@ private struct WorkoutHeader: View {
                 Spacer(minLength: 0)
                 if !inProgress {
                     roundButton("play.fill", label: "Start workout") {
-                        if finished && done > 0 { confirmingStartOver = true } else { start() }
+                        if finished { startOver() }   // after ending: back to the original state, no question
+                        start()
                     }
                         .transition(.opacity.combined(with: .scale))
                 }
@@ -941,14 +941,6 @@ private struct WorkoutHeader: View {
             }
         }
         .onAppear(perform: newDayCheck)
-        .confirmationDialog("Start this workout again?", isPresented: $confirmingStartOver, titleVisibility: .visible) {
-            Button("Start again", role: .destructive) {
-                startOver()
-                start()
-            }
-        } message: {
-            Text("Today's sets for this workout will be cleared and everything goes back to the start.")
-        }
         .confirmationDialog("End this workout?", isPresented: $confirmingStop, titleVisibility: .visible) {
             Button("End workout", role: .destructive, action: stop)
         } message: {
