@@ -37,6 +37,7 @@ struct TodayView: View {
     @AppStorage("workoutTimerStarted") private var timerStarted = false
     @AppStorage("workoutTimerStart") private var timerStartedAt = 0.0
     @AppStorage("workoutTimerElapsed") private var timerElapsed = 0.0
+    @AppStorage("workoutTimerDay") private var timerDay = ""
 
     private var today: Date { .now }
     private var dayStart: Date { Calendar.current.startOfDay(for: .now) }
@@ -365,6 +366,7 @@ struct TodayView: View {
     }
 
     private func logRound(_ b: Block, round r: Int, participants: [ExState]) {
+        autoStartWorkout()
         for st in participants {
             let v = roundValues(st, r)
             upsert(st.ex.id, r, kg: st.ex.isTimed ? 0 : units.toKg(v.weight), reps: v.reps)
@@ -778,6 +780,7 @@ struct TodayView: View {
 
     private func logSet(_ ex: ExerciseTemplate, _ n: Int, kg: Double, reps: Int, startRest: Bool = true) {
         let before = state(for: ex)
+        autoStartWorkout()
         upsert(ex.id, n, kg: kg, reps: reps)
         try? context.save()
         logCount += 1
@@ -852,6 +855,19 @@ struct TodayView: View {
             expandedID = ""   // back to the beginning: everything closed
             restEnd = nil
         }
+    }
+
+    // Logging a set before tapping ▶ starts the workout (timer and progress bar) automatically.
+    // Only when it hasn't started yet today; a stopped or paused workout is left as it is.
+    private func autoStartWorkout() {
+        let todayKey = PlanTemplate.dayKey(.now)
+        if timerDay != todayKey {   // a timer left from another day starts fresh
+            resetTimer()
+            timerDay = todayKey
+        }
+        guard !timerStarted, !timerFinished, timerStartedAt == 0, timerElapsed == 0 else { return }
+        timerStartedAt = Date.now.timeIntervalSince1970
+        withAnimation(.easeOut(duration: 0.25)) { timerStarted = true }
     }
 
     private func resetTimer() {
