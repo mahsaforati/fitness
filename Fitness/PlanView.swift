@@ -163,6 +163,12 @@ struct WorkoutTemplateEditor: View {
     // Exercises in cards: runs of normal exercises share a card; each superset gets its own card
     // labelled "Superset". Drag (iOS handles) reorders within a card; long-press an exercise →
     // Move up / Move down moves it across cards.
+    private struct IndexedExercise: Identifiable {
+        let index: Int
+        let exercise: ExerciseTemplate
+        var id: String { exercise.id }
+    }
+
     private struct ExerciseGroup: Identifiable {
         let range: Range<Int>
         let isSuperset: Bool
@@ -213,17 +219,19 @@ struct WorkoutTemplateEditor: View {
     @ViewBuilder
     private func groupRows(_ g: ExerciseGroup, _ list: [ExerciseTemplate]) -> some View {
         if isEditing {
-            ForEach(Array(g.range), id: \.self) { i in
-                editRow(i, list[i], isLast: i == list.count - 1)
-                    .contextMenu { moveMenu(i, count: list.count) }
+            // Rows are identified by exercise (not position), so a moved row keeps its identity
+            // and the rows around it don't redraw.
+            ForEach(g.range.map { IndexedExercise(index: $0, exercise: list[$0]) }) { item in
+                editRow(item.index, item.exercise, isLast: item.index == list.count - 1)
+                    .contextMenu { moveMenu(item.index, count: list.count) }
             }
             .onMove { from, to in
                 let start = g.range.lowerBound
                 moveExercises(from: IndexSet(from.map { $0 + start }), to: to + start)
             }
         } else {
-            ForEach(Array(g.range), id: \.self) { i in
-                exerciseRow(list[i])
+            ForEach(g.range.map { IndexedExercise(index: $0, exercise: list[$0]) }) { item in
+                exerciseRow(item.exercise)
             }
         }
     }
