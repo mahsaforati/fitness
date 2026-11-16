@@ -308,15 +308,22 @@ struct TodayView: View {
     private func restLine(for s: ExState) -> some View {
         if let end = restEnd, restFor == s.ex.id {
             RestLine(end: end, total: restTotal,
-                     add: { addRest(to: end) },
-                     skip: { withAnimation { restEnd = nil } })
+                     add: { changeRest(end, by: 10) },
+                     subtract: { changeRest(end, by: -10) })
                 .transition(.opacity)
         }
     }
 
-    private func addRest(to end: Date) {
-        restEnd = end.addingTimeInterval(10)
-        restTotal += 10
+    // +10 s / −10 s. Going below zero just ends the rest.
+    private func changeRest(_ end: Date, by seconds: Double) {
+        let newEnd = end.addingTimeInterval(seconds)
+        if newEnd <= .now {
+            withAnimation { restEnd = nil }
+            restDoneCount += 1
+        } else {
+            restEnd = newEnd
+            restTotal = max(1, restTotal + seconds)
+        }
     }
 
     @ViewBuilder
@@ -1208,42 +1215,64 @@ private struct WorkoutHeader: View {
 
 // MARK: - Rest timer bar
 
-// A thin countdown line inside the open exercise, under the set you just logged:
-// "Rest ━━━━━━── 0:52  +10s  Skip". The line empties as the rest runs down.
+// A thin countdown line inside the open exercise, right under its name:
+// "Rest  ━━━━━━──  0:52  −10s  +10s". The line empties as the rest runs down.
+// Fixed widths keep the time and buttons from shifting as the numbers change.
 private struct RestLine: View {
     let end: Date
     let total: Double
     let add: () -> Void
-    let skip: () -> Void
+    let subtract: () -> Void
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
-            let left = max(0, end.timeIntervalSince(ctx.date))
-            let secs = Int(left.rounded(.up))
-            HStack(spacing: 10) {
-                Text("Rest").font(.subheadline).foregroundStyle(.secondary)
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color(.systemGray5))
-                        Capsule().fill(Color(.systemGray2))
-                            .frame(width: geo.size.width * CGFloat(total > 0 ? left / total : 0))
-                            .animation(.linear(duration: 0.25), value: left)
-                    }
-                }
-                .frame(height: 4)
-                Text("\(secs / 60):\(String(format: "%02d", secs % 60))")
-                    .font(.subheadline.weight(.semibold)).monospacedDigit()
-                Button("+10s", action: add)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .buttonStyle(.borderless)
-                Button("Skip", action: skip)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.primary)
-                    .buttonStyle(.borderless)
-            }
-            .padding(.vertical, 2)
+            content(left: max(0, end.timeIntervalSince(ctx.date)))
         }
+    }
+
+    private func content(left: TimeInterval) -> some View {
+        HStack(spacing: 10) {
+            Text("Rest")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            line(fraction: total > 0 ? left / total : 0)
+            Text(clock(left))
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .frame(width: 40, alignment: .trailing)
+            stepButton("−10s", action: subtract)
+            stepButton("+10s", action: add)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func line(fraction: Double) -> some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color(.systemGray5))
+                Capsule().fill(Color(.systemGray2))
+                    .frame(width: geo.size.width * CGFloat(fraction))
+                    .animation(.linear(duration: 0.25), value: fraction)
+            }
+        }
+        .frame(height: 4)
+    }
+
+    private func stepButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.footnote.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(Color.primary)
+                .frame(width: 46, height: 26)
+                .background(Capsule().fill(Color(.systemGray5)))
+        }
+        .buttonStyle(.borderless)
+    }
+
+    private func clock(_ t: TimeInterval) -> String {
+        let secs = Int(t.rounded(.up))
+        return String(format: "%d:%02d", secs / 60, secs % 60)
     }
 }
 
