@@ -278,9 +278,13 @@ struct WorkoutTemplateEditor: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: 140)
             }
-            if !isLast { linkControl(i) }
         }
         .padding(.vertical, 4)
+        // The link between this exercise and the one above sits on the line between them.
+        .overlay(alignment: .top) {
+            if i > 0 { linkControl(i - 1).offset(y: -27) }
+        }
+        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
     }
 
     private func setsBinding(_ i: Int) -> Binding<Int> {
@@ -294,28 +298,25 @@ struct WorkoutTemplateEditor: View {
     }
 
     // "Link with next as superset", or "Superset with next · Unlink" when they're already linked.
-    @ViewBuilder
     private func linkControl(_ i: Int) -> some View {
         let list = draftBinding.wrappedValue.exercises
         let linked = list[i].superset != nil && list[i].superset == list[i + 1].superset
-        HStack(spacing: 6) {
-            Image(systemName: linked ? "link" : "link.badge.plus")
-                .font(.caption).foregroundStyle(.secondary)
-            if linked {
-                Text("Superset with \(list[i + 1].name)").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Unlink") { withAnimation { unlink(after: i) } }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(Color.primary)
-            } else {
-                Button("Link with next as superset") { withAnimation { link(i, i + 1) } }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(Color.primary)
-                Spacer()
-            }
+        // A small pill centred on the divider: "+ Link as superset", or just "Unlink" once linked.
+        return Button {
+            withAnimation { if linked { unlink(after: i) } else { link(i, i + 1) } }
+        } label: {
+            Text(linked ? "Unlink" : "+ Link as superset")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.primary)
+                .padding(.horizontal, 12)
+                .frame(height: 24)
+                .background(
+                    Capsule().fill(Color(.secondarySystemGroupedBackground))
+                        .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+                )
         }
+        .buttonStyle(.borderless)
+        .frame(maxWidth: .infinity)
     }
 
     // iOS has already moved the row on screen when you let go, so apply the new order straight
