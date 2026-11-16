@@ -26,7 +26,6 @@ struct TodayView: View {
     @State private var pendingRemoval: ExerciseTemplate?
     @State private var confirmingReset = false
     @State private var showingWorkouts = false
-    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32   // a bit larger than .title (28); follows Dynamic Type
     // Shared with WorkoutHeader: picking another workout after finishing brings back its Start button.
     @AppStorage("workoutTimerFinished") private var timerFinished = false
     @AppStorage("workoutTimerStarted") private var timerStarted = false
@@ -47,41 +46,6 @@ struct TodayView: View {
         overrideRaw = id == scheduled.id ? "" : "\(PlanTemplate.dayKey(today))|\(id)"
     }
 
-    // "Workout A" with its focus ("Lower body") underneath, and a small dumbbell button at the end.
-    // The button opens Your workouts (A, B, C with previews) to swap today's workout.
-    private var titleRow: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .center, spacing: 10) {
-                // "Workout A · Lower body" → "Workout A" on top, "Lower body" smaller underneath
-                let parts = workout.title.components(separatedBy: " · ")
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(parts[0])
-                        .font(.system(size: titleSize, weight: .bold))
-                        .foregroundStyle(Tone.ink)
-                        .lineLimit(1)
-                    if parts.count > 1 {
-                        Text(parts.dropFirst().joined(separator: " · "))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-                }
-                Spacer(minLength: 0)
-                Button { showingWorkouts = true } label: {
-                    Image(systemName: "dumbbell.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color(red: 0.267, green: 0.251, blue: 0.235))
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(Color(red: 0.906, green: 0.898, blue: 0.894)))
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Your workouts")
-            }
-        }
-        .padding(.top, 8)
-    }
-
     var body: some View {
         let states = workout.exercises.map(state(for:))
         let doneCount = states.filter(\.done).count
@@ -90,15 +54,11 @@ struct TodayView: View {
         NavigationStack(path: $path) {
             List {
                 Section {
-                    titleRow
+                    WorkoutHeader(title: workout.title, done: doneCount, total: states.count,
+                                  showWorkouts: { showingWorkouts = true })
                         .listRowBackground(Color.clear)
                         // leading 20 = the list's standard row inset, so the title lines up with the exercise names
                         .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 4))
-                        .listRowSeparator(.hidden)
-                    // Same section as the title so there's only a small gap between them.
-                    WorkoutHeader(done: doneCount, total: states.count)
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 16, leading: 4, bottom: 0, trailing: 4))
                         .listRowSeparator(.hidden)
                 }
 
@@ -840,8 +800,11 @@ struct CatalogDetailView: View {
 // The timer is saved, so it keeps going if you leave the app, and everything resets on a new day.
 
 private struct WorkoutHeader: View {
+    let title: String            // "Workout A · Lower body"
     let done: Int
     let total: Int
+    let showWorkouts: () -> Void // the dumbbell button: Your workouts
+    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32   // a bit larger than .title (28)
 
     @AppStorage("workoutTimerStart") private var startedAt = 0.0      // when it was last started; 0 = not running
     @AppStorage("workoutTimerElapsed") private var elapsed = 0.0      // seconds banked before the last start
@@ -857,20 +820,53 @@ private struct WorkoutHeader: View {
     private static let track    = Color(red: 0.906, green: 0.898, blue: 0.894) // #E7E5E4
     private static let stone    = Color(red: 0.267, green: 0.251, blue: 0.235) // #44403C
 
+    // In progress = started and not stopped yet (also covers a timer started before this update).
+    private var inProgress: Bool { !finished && (started || running || elapsed > 0) }
+
     var body: some View {
-        Group {
-            if finished {
-                finishedView
-            } else if started || running || elapsed > 0 {   // also covers a timer started before this update
+        VStack(alignment: .leading, spacing: 0) {
+            // "Workout A" with "Lower body" underneath; ▶ Start and the dumbbell at the end of the line.
+            HStack(alignment: .center, spacing: 8) {
+                let parts = title.components(separatedBy: " · ")
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(parts[0])
+                        .font(.system(size: titleSize, weight: .bold))
+                        .foregroundStyle(Tone.ink)
+                        .lineLimit(1)
+                    if parts.count > 1 {
+                        Text(parts.dropFirst().joined(separator: " · "))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                Spacer(minLength: 0)
+                if !inProgress {
+                    roundButton("play.fill", label: "Start workout", action: start)
+                        .transition(.opacity.combined(with: .scale))
+                }
+                roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
+            }
+            .padding(.top, 8)
+
+            if inProgress {
+                // Running or paused: the bar with the time, then pause/resume and stop.
                 HStack(spacing: 8) {
                     bar
-                    circleButton(running ? "pause.fill" : "play.fill",
-                                 label: running ? "Pause workout timer" : "Resume workout timer",
-                                 action: togglePause)
-                    circleButton("stop.fill", label: "Stop workout") { confirmingStop = true }
+                    roundButton(running ? "pause.fill" : "play.fill",
+                                label: running ? "Pause workout timer" : "Resume workout timer",
+                                action: togglePause)
+                    roundButton("stop.fill", label: "Stop workout") { confirmingStop = true }
                 }
-            } else {
-                startButton
+                .padding(.top, 12)
+                .transition(.opacity)
+            } else if finished && total > 0 && done >= total {
+                // Stopped after finishing every exercise.
+                Label("Done in \(format(elapsed))", systemImage: "checkmark")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Tone.check)
+                    .padding(.top, 6)
             }
         }
         .onAppear(perform: newDayCheck)
@@ -881,29 +877,17 @@ private struct WorkoutHeader: View {
         }
     }
 
-    // After Stop: the Start button comes back. "✓ Done in 42:10" shows underneath only if every exercise was finished.
-    // Starting again begins a fresh timer; logged sets stay as they are.
-    private var finishedView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            startButton
-            if total > 0 && done >= total {
-                Label("Done in \(format(elapsed))", systemImage: "checkmark")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Tone.check)
-                    .padding(.leading, 4)
-            }
-        }
-    }
-
-    private var startButton: some View {
-        Button(action: start) {
-            Label("Start", systemImage: "play.fill")
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, minHeight: 48)
-                .background(Capsule().fill(Self.sage))
+    // Grey circle button, the same style for ▶, the dumbbell, pause and stop.
+    private func roundButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Self.stone)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Self.track))
         }
         .buttonStyle(.borderless)
+        .accessibilityLabel(label)
     }
 
     // Thick bar: progress fill, "2 of 6" on the left, the time on the right.
@@ -937,18 +921,6 @@ private struct WorkoutHeader: View {
             Button("Start over", systemImage: "arrow.counterclockwise", role: .destructive, action: reset)
         }
         .accessibilityElement(children: .combine)
-    }
-
-    private func circleButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.footnote)
-                .foregroundStyle(Tone.ink)
-                .frame(width: 36, height: 36)
-                .background(Circle().fill(Self.track))
-        }
-        .buttonStyle(.borderless)
-        .accessibilityLabel(label)
     }
 
     private func totalTime(at date: Date) -> TimeInterval {
