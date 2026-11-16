@@ -184,14 +184,20 @@ private struct DayCard: View {
     let logs: [SetLog]
     let units: UnitSystem
     @AppStorage(PlanTemplate.editsKey) private var editsRaw = ""
+    @Environment(\.modelContext) private var context
+    @State private var confirmingDelete = false
 
     private static var allExercises: [ExerciseTemplate] { PlanTemplate.phase1.flatMap(\.exercises) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Palette.ink)
+            HStack(alignment: .firstTextBaseline) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Palette.ink)
+                Spacer()
+                if !logs.isEmpty { dayMenu }
+            }
 
             if logs.isEmpty {
                 Text(Calendar.current.isDateInToday(day) ? "Nothing logged yet" : "No workout logged")
@@ -218,6 +224,37 @@ private struct DayCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 16).fill(Palette.card))
+        .confirmationDialog(deleteQuestion, isPresented: $confirmingDelete, titleVisibility: .visible) {
+            Button("Delete \(logs.count) set\(logs.count == 1 ? "" : "s")", role: .destructive, action: deleteDay)
+        } message: {
+            Text("This can't be undone.")
+        }
+    }
+
+    // ⋯ on the day: delete everything logged that day (asks first).
+    private var dayMenu: some View {
+        Menu {
+            Button(role: .destructive) { confirmingDelete = true } label: {
+                Label("Delete this day's sets", systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Palette.muted)
+                .frame(width: 32, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Day options")
+    }
+
+    private var deleteQuestion: String {
+        "Delete \(logs.count) set\(logs.count == 1 ? "" : "s") from \(day.formatted(.dateTime.month(.abbreviated).day()))?"
+    }
+
+    private func deleteDay() {
+        for log in logs { context.delete(log) }
+        try? context.save()
     }
 
     // "Mon, Nov 9 · Workout A" (date order follows the phone's region)
