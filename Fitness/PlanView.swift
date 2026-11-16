@@ -54,68 +54,130 @@ struct PlanView: View {
     }
 }
 
-// MARK: - One workout: rename, reorder, add, remove and edit exercises
+// MARK: - One workout
+// Opens read-only. Edit makes a working copy: rename, add, remove, reorder (drag), and tap an
+// exercise to change its sets, reps or superset. Nothing is saved until ✓; ✕ throws the copy away.
+
+private struct ExerciseRef: Hashable, Identifiable { let id: String }
 
 struct WorkoutTemplateEditor: View {
     let workoutID: String
     @AppStorage(PlanTemplate.templatesKey) private var templatesRaw = ""
+    @State private var draft: WorkoutTemplate?          // non-nil while editing
+    @State private var editMode: EditMode = .inactive
     @State private var showingAdd = false
+    @State private var editingExercise: ExerciseRef?
 
     private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
-    private var workout: WorkoutTemplate? { workouts.first { $0.id == workoutID } }
+    private var saved: WorkoutTemplate? { workouts.first { $0.id == workoutID } }
+    private var shown: WorkoutTemplate? { draft ?? saved }
+    private var isEditing: Bool { draft != nil }
 
-    // Save one changed workout (all workouts are stored together).
-    private func update(_ change: (inout WorkoutTemplate) -> Void) {
-        var all = workouts
-        guard let i = all.firstIndex(where: { $0.id == workoutID }) else { return }
-        change(&all[i])
-        templatesRaw = PlanTemplate.encodeTemplates(all)
-    }
-
-    private var titleBinding: Binding<String> {
-        Binding(get: { workout?.title ?? "" },
-                set: { newTitle in update { $0.title = newTitle } })
+    private var draftBinding: Binding<WorkoutTemplate> {
+        Binding(get: { draft ?? saved ?? WorkoutTemplate(id: workoutID, title: "", exercises: []) },
+                set: { draft = $0 })
     }
 
     var body: some View {
         List {
-            Section("Name") {
-                TextField("Workout name", text: titleBinding)
-            }
-
-            Section {
-                ForEach(workout?.exercises ?? []) { ex in
-                    NavigationLink {
-                        ExerciseTemplateEditor(workoutID: workoutID, exerciseID: ex.id)
-                    } label: {
-                        exerciseRow(ex)
-                    }
+            if isEditing {
+                Section("Name") {
+                    TextField("Workout name", text: draftBinding.title)
                 }
-                .onMove { from, to in update { $0.exercises.move(fromOffsets: from, toOffset: to) } }
-                .onDelete { offsets in update { $0.exercises.remove(atOffsets: offsets) } }
-
-                Button {
-                    showingAdd = true
-                } label: {
-                    Label("Add exercise", systemImage: "plus")
+            }
+            Section {
+                exerciseRows
+                if isEditing {
+                    Button { showingAdd = true } label: { Label("Add exercise", systemImage: "plus") }
                 }
             } header: {
                 Text("Exercises")
             } footer: {
-                Text("Tap an exercise to change its sets, reps or superset. Use Edit to reorder or remove.")
+                Text(isEditing
+                     ? "Tap an exercise to change its sets, reps or superset. Drag to reorder, or tap ⊖ to remove. Tap ✓ to save."
+                     : "Tap Edit to change this workout.")
             }
         }
-        .navigationTitle(workout?.title ?? "Workout")
+        .environment(\.editMode, $editMode)
+        .navigationTitle(shown?.title ?? "Workout")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { EditButton() }
+        .navigationBarBackButtonHidden(isEditing)
+        .toolbar { toolbarContent }
+        .navigationDestination(item: $editingExercise) { ref in
+            ExerciseTemplateEditor(workout: draftBinding, exerciseID: ref.id)
+        }
         .sheet(isPresented: $showingAdd) {
-            AddExerciseSheet(current: Set(workout?.exercises.map(\.id) ?? [])) { ex in
-                update { w in
-                    var added = ex
-                    added.superset = nil   // a new exercise starts on its own
-                    w.exercises.append(added)
-                }
+            AddExerciseSheet(current: Set(shown?.exercises.map(\.id) ?? [])) { ex in
+                var added = ex
+                added.superset = nil   // a new exercise starts on its own
+                draftBinding.wrappedValue.exercises.append(added)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var exerciseRows: some View {
+        if isEditing {
+            ForEach(draftBinding.wrappedValue.exercises) { ex in
+                Button { editingExercise = ExerciseRef(id: ex.id) } label: {
+                    HStack {
+                        exerciseRow(ex)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .foregroundStyle(Color.primary)
+            }
+            .onMove { from, to in draftBinding.wrappedValue.exercises.move(fromOffsets: from, toOffset: to) }
+            .onDelete { offsets in draftBinding.wrappedValue.exercises.remove(atOffsets: offsets) }
+        } else {
+            ForEach(saved?.exercises ?? []) { ex in
+                exerciseRow(ex)
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if isEditing {
+            ToolbarItem(placement: .cancellationAction) {
+                Button { cancel() } label: { Image(systemName: "xmark") }
+                    .accessibilityLabel("Cancel changes")
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button { save() } label: { Image(systemName: "checkmark") }
+                    .accessibilityLabel("Save changes")
+            }
+        } else {
+            ToolbarItem(placement: .primaryAction) {
+                Button("Edit") { startEditing() }
+            }
+        }
+    }
+
+    private func startEditing() {
+        draft = saved
+        withAnimation { editMode = .active }
+    }
+
+    private func cancel() {
+        withAnimation {
+            draft = nil
+            editMode = .inactive
+        }
+    }
+
+    private func save() {
+        guard var edited = draft else { return }
+        edited.title = edited.title.trimmingCharacters(in: .whitespaces)
+        if edited.title.isEmpty { edited.title = saved?.title ?? "Workout \(workoutID)" }
+        var all = workouts
+        if let i = all.firstIndex(where: { $0.id == workoutID }) { all[i] = edited }
+        templatesRaw = PlanTemplate.encodeTemplates(all)
+        withAnimation {
+            draft = nil
+            editMode = .inactive
         }
     }
 
@@ -135,48 +197,35 @@ struct WorkoutTemplateEditor: View {
     // Superset tags shown as 1, 2… in the order they appear in this workout.
     private func supersetNumber(_ tag: String) -> Int {
         var tags: [String] = []
-        for e in workout?.exercises ?? [] {
+        for e in shown?.exercises ?? [] {
             if let t = e.superset, !tags.contains(t) { tags.append(t) }
         }
         return (tags.firstIndex(of: tag) ?? 0) + 1
     }
 }
 
-// MARK: - One exercise in a workout: name, sets, reps, superset
+// MARK: - One exercise in the workout being edited: sets, reps, superset
+// Changes go into the working copy; they're saved with the workout's ✓.
 
 struct ExerciseTemplateEditor: View {
-    let workoutID: String
+    @Binding var workout: WorkoutTemplate
     let exerciseID: String
-    @AppStorage(PlanTemplate.templatesKey) private var templatesRaw = ""
 
-    private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
-    private var workout: WorkoutTemplate? { workouts.first { $0.id == workoutID } }
-    private var exercise: ExerciseTemplate? { workout?.exercises.first { $0.id == exerciseID } }
-
-    private func update(_ change: (inout ExerciseTemplate) -> Void) {
-        var all = workouts
-        guard let w = all.firstIndex(where: { $0.id == workoutID }),
-              let e = all[w].exercises.firstIndex(where: { $0.id == exerciseID }) else { return }
-        change(&all[w].exercises[e])
-        templatesRaw = PlanTemplate.encodeTemplates(all)
-    }
+    private var index: Int? { workout.exercises.firstIndex { $0.id == exerciseID } }
 
     private var setsBinding: Binding<Int> {
-        Binding(get: { exercise?.sets ?? 3 }, set: { v in update { $0.sets = v } })
+        Binding(get: { index.map { workout.exercises[$0].sets } ?? 3 },
+                set: { v in if let i = index { workout.exercises[i].sets = v } })
     }
     private var repsBinding: Binding<String> {
-        Binding(get: { exercise?.reps ?? "" }, set: { v in update { $0.reps = v } })
-    }
-
-    // Superset choices: on its own, or together with the exercise above / below.
-    private var neighbours: (above: ExerciseTemplate?, below: ExerciseTemplate?) {
-        guard let list = workout?.exercises, let i = list.firstIndex(where: { $0.id == exerciseID }) else { return (nil, nil) }
-        return (i > 0 ? list[i - 1] : nil, i + 1 < list.count ? list[i + 1] : nil)
+        Binding(get: { index.map { workout.exercises[$0].reps } ?? "" },
+                set: { v in if let i = index { workout.exercises[i].reps = v } })
     }
 
     var body: some View {
         Form {
-            if let ex = exercise {
+            if let i = index {
+                let ex = workout.exercises[i]
                 Section {
                     Text(ex.name).font(.headline)
                 }
@@ -193,7 +242,7 @@ struct ExerciseTemplateEditor: View {
                     Text("Reps can be a range like 10–12, \"8 / leg\", or a time like \"30–40 s\" for holds.")
                 }
                 Section {
-                    supersetControls(ex)
+                    supersetControls(i)
                 } header: {
                     Text("Superset")
                 } footer: {
@@ -203,33 +252,29 @@ struct ExerciseTemplateEditor: View {
                 Text("This exercise isn't in the workout any more.").foregroundStyle(.secondary)
             }
         }
-        .navigationTitle(exercise?.name ?? "Exercise")
+        .navigationTitle(index.map { workout.exercises[$0].name } ?? "Exercise")
         .navigationBarTitleDisplayMode(.inline)
     }
 
     @ViewBuilder
-    private func supersetControls(_ ex: ExerciseTemplate) -> some View {
-        let n = neighbours
+    private func supersetControls(_ i: Int) -> some View {
+        let list = workout.exercises
+        let ex = list[i]
         if ex.superset != nil {
-            Button("Take out of the superset", role: .destructive) { update { $0.superset = nil } }
+            Button("Take out of the superset", role: .destructive) { workout.exercises[i].superset = nil }
         }
-        if let above = n.above, above.superset == nil || above.superset != ex.superset {
-            Button("Superset with \(above.name) (above)") { join(above) }
+        if i > 0, list[i - 1].superset == nil || list[i - 1].superset != ex.superset {
+            Button("Superset with \(list[i - 1].name) (above)") { join(i, with: i - 1) }
         }
-        if let below = n.below, below.superset == nil || below.superset != ex.superset {
-            Button("Superset with \(below.name) (below)") { join(below) }
+        if i + 1 < list.count, list[i + 1].superset == nil || list[i + 1].superset != ex.superset {
+            Button("Superset with \(list[i + 1].name) (below)") { join(i, with: i + 1) }
         }
     }
 
-    // Put this exercise in the same superset as `other` (giving `other` a new tag if it has none).
-    private func join(_ other: ExerciseTemplate) {
-        var all = workouts
-        guard let w = all.firstIndex(where: { $0.id == workoutID }),
-              let o = all[w].exercises.firstIndex(where: { $0.id == other.id }),
-              let e = all[w].exercises.firstIndex(where: { $0.id == exerciseID }) else { return }
-        let tag = all[w].exercises[o].superset ?? "\(workoutID)-\(UUID().uuidString.prefix(6))"
-        all[w].exercises[o].superset = tag
-        all[w].exercises[e].superset = tag
-        templatesRaw = PlanTemplate.encodeTemplates(all)
+    // Put exercise `i` in the same superset as exercise `o` (giving `o` a new tag if it has none).
+    private func join(_ i: Int, with o: Int) {
+        let tag = workout.exercises[o].superset ?? "\(workout.id)-\(UUID().uuidString.prefix(6))"
+        workout.exercises[o].superset = tag
+        workout.exercises[i].superset = tag
     }
 }

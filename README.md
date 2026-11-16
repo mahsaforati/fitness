@@ -36,4 +36,4 @@ Requires iOS 17+.
 - **Up next goes in order**: Today shows the workout after the one you last did on an earlier day (A → B → C → A…), not by weekday. Nothing logged yet → A
 - **Your workouts** list has no Today/Scheduled labels; opening one shows its exercises and a **Let's Do This!** button that makes it today's workout
 - **Auto start**: logging a set when the workout isn't running does what ▶ does: starts the timer and progress bar (resumes if paused; a new timer if it was stopped, keeping your sets)
-- **Edit your workouts** (Plan tab): tap a workout to rename it, add / remove / reorder exercises (Edit), and tap an exercise to change sets, reps (or time) and supersets. Saved on the iPhone; **Reset to the original plan** undoes it. Today and Calendar use your edited workouts
+- **Edit your workouts** (Plan tab): tap a workout to see it; tap **Edit** to rename it, add / remove / drag to reorder exercises, and tap an exercise to change sets, reps (or time) and supersets. Nothing is saved until you tap **✓**; **✕** discards the changes. Saved on the iPhone; **Reset to the original plan** undoes all edits. Today and Calendar use your edited workouts
