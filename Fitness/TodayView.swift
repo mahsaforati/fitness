@@ -57,8 +57,9 @@ struct TodayView: View {
                     WorkoutHeader(title: workout.title, done: doneCount, total: states.count,
                                   showWorkouts: { showingWorkouts = true })
                         .listRowBackground(Color.clear)
-                        // leading 20 = the list's standard row inset, so the title lines up with the exercise names
-                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 4))
+                        // 20 on both sides = the list's standard row inset, so the title lines up with the
+                        // exercise names and the buttons/bar end where the content inside the cards ends.
+                        .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
                         .listRowSeparator(.hidden)
                 }
 
