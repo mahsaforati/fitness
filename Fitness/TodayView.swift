@@ -443,12 +443,22 @@ struct TodayView: View {
     }
 
     // What a set row offers: last session's same set, else the set before it today,
-    // else last session's last set. `known` is false when there's no history yet.
+    // else last session's last set. With no history yet it's preloaded with a starting value:
+    // the plan's reps, and 10 lb (5 kg) — or bodyweight for bodyweight/band exercises.
     private func suggestion(_ s: ExState, _ n: Int) -> (kg: Double, reps: Int, known: Bool) {
         if let l = s.last[n] { return (l.weightKg, l.reps, true) }
         if let p = s.logged.filter({ $0.key < n }).max(by: { $0.key < $1.key })?.value { return (p.weightKg, p.reps, true) }
         if let l = s.last.max(by: { $0.key < $1.key })?.value { return (l.weightKg, l.reps, true) }
-        return (0, Int(s.ex.reps.prefix(while: \.isNumber)) ?? 10, false)
+        let reps = Int(s.ex.reps.prefix(while: \.isNumber)) ?? 10
+        return (Self.startingKg(for: s.ex, units: units), reps, true)
+    }
+
+    private static let bodyweightIDs: Set<String> = ["dead-bug", "plank", "push-up", "side-plank", "lateral-walk"]
+
+    private static func startingKg(for ex: ExerciseTemplate, units: UnitSystem) -> Double {
+        if bodyweightIDs.contains(ex.id) { return 0 }
+        if let c = ExerciseCatalog.exercise(id: ex.id), c.equipment != "dumbbell" { return 0 }
+        return units == .imperial ? 10 / 2.20462 : 5
     }
 
     private func collapsedSubtitle(_ s: ExState) -> String {
