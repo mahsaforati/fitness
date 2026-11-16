@@ -205,7 +205,8 @@ struct TodayView: View {
             }
         } header: {
             if b.isSuperset {
-                Label("Superset", systemImage: "arrow.triangle.2.circlepath")
+                Label(groupOpen ? "Superset · Round \(min(completedRounds(b) + 1, roundsTotal(b))) of \(roundsTotal(b))" : "Superset",
+                      systemImage: "arrow.triangle.2.circlepath")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(Tone.ink)
             }
@@ -241,53 +242,52 @@ struct TodayView: View {
         let total: Int = roundsTotal(b)
         let finished: Int = completedRounds(b)
         let current: Int = finished + 1
-        supersetHeader(b, current: min(current, total), total: total)
+        supersetNames(b)
         restLine(for: b.states[0])
         ForEach(roundNumbers(upTo: finished), id: \.self) { r in
             doneRoundRow(b, r)
         }
         if current <= total {
-            let participants: [ExState] = b.states.filter { $0.count >= current }
-            ForEach(participants, id: \.ex.id) { st in
-                roundExerciseRow(st, current)
+            ForEach(Array(b.states.enumerated()), id: \.element.ex.id) { i, st in
+                if st.count >= current {
+                    roundExerciseRow(st, number: i + 1, round: current)
+                }
             }
-            logRoundButton(b, round: current, participants: participants)
+            logRoundButton(b, round: current, participants: b.states.filter { $0.count >= current })
         } else {
             addRoundButton(b)
         }
     }
 
-    private func supersetHeader(_ b: Block, current: Int, total: Int) -> some View {
-        Button {
-            withAnimation { expandedID = ""; editing = nil }
-        } label: {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(b.states.map(\.ex.name).joined(separator: " + "))
-                        .font(.headline).foregroundStyle(Color.primary)
-                    Text("\(total) rounds · rest after each round")
-                        .font(.subheadline).foregroundStyle(.secondary)
+    // The exercises, numbered, each with How. Tap outside How to close the superset.
+    private func supersetNames(_ b: Block) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(b.states.enumerated()), id: \.element.ex.id) { i, st in
+                HStack(spacing: 8) {
+                    Text("\(i + 1)")
+                        .font(.footnote).foregroundStyle(.secondary)
+                        .frame(width: 14, alignment: .leading)
+                    Text(st.ex.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.primary)
+                    Spacer()
+                    howButton(st)
                 }
-                Spacer()
-                Text("Round \(current) of \(total)")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.secondary)
             }
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
-        .padding(.top, 4)
-        .padding(.bottom, isResting(b.states[0]) ? 0 : 4)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .onTapGesture { withAnimation { expandedID = ""; editing = nil } }
         .listRowSeparator(isResting(b.states[0]) ? .hidden : .automatic, edges: .bottom)
     }
 
-    // "Round 1        10 lb × 12 · BW × 8" — swipe left to remove the round.
+    // "Round 1        10×12 · BW×8 · 30 s" — swipe left to remove the round.
     private func doneRoundRow(_ b: Block, _ r: Int) -> some View {
         let parts: [String] = b.states.compactMap { st in
-            st.logged[r].map { setText($0.weightKg, $0.reps) }
+            st.logged[r].map { compactText($0.weightKg, $0.reps, st.ex) }
         }
         return HStack {
-            Text("Round \(r)").foregroundStyle(.secondary)
+            Text("Round \(r)").font(.subheadline).foregroundStyle(.secondary)
             Spacer()
             Text(parts.joined(separator: " · "))
                 .font(.subheadline.weight(.semibold))
@@ -321,28 +321,32 @@ struct TodayView: View {
         return (d?.weight ?? displayWeight(sug.kg), d?.reps ?? sug.reps)
     }
 
-    // One exercise in the current round: name, then − / + for weight (BW for bodyweight) and reps.
-    private func roundExerciseRow(_ st: ExState, _ r: Int) -> some View {
+    // One exercise in the current round, by its number: − / + for weight (BW or none) and reps / seconds.
+    private func roundExerciseRow(_ st: ExState, number: Int, round r: Int) -> some View {
         let key: String = roundKey(st, r)
         let v = roundValues(st, r)
         return HStack(spacing: 4) {
-            Text(st.ex.name)
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            Text("\(number)")
+                .font(.footnote).foregroundStyle(.secondary)
+                .frame(width: 14, alignment: .leading)
             Spacer(minLength: 4)
-            roundWeight(st, key: key, weight: v.weight, reps: v.reps)
-            Text("×").foregroundStyle(.secondary)
-            repsControl(id: key, weight: v.weight, reps: v.reps)
+            amountControls(st.ex, key: key, weight: v.weight, reps: v.reps)
         }
     }
 
+    // Weight × reps steppers; bodyweight shows "BW ×" and only reps; timed exercises show only seconds.
     @ViewBuilder
-    private func roundWeight(_ st: ExState, key: String, weight: Double, reps: Int) -> some View {
-        if isBodyweight(st.ex) && weight == 0 {
+    private func amountControls(_ ex: ExerciseTemplate, key: String, weight: Double, reps: Int) -> some View {
+        if ex.isTimed {
+            repsControl(id: key, weight: 0, reps: reps, timed: true)
+        } else if isBodyweight(ex) && weight == 0 {
             Text("BW").font(.body.weight(.semibold))
+            Text("×").foregroundStyle(.secondary)
+            repsControl(id: key, weight: weight, reps: reps)
         } else {
             weightControl(id: key, weight: weight, reps: reps)
+            Text("×").foregroundStyle(.secondary)
+            repsControl(id: key, weight: weight, reps: reps)
         }
     }
 
@@ -363,7 +367,7 @@ struct TodayView: View {
     private func logRound(_ b: Block, round r: Int, participants: [ExState]) {
         for st in participants {
             let v = roundValues(st, r)
-            upsert(st.ex.id, r, kg: units.toKg(v.weight), reps: v.reps)
+            upsert(st.ex.id, r, kg: st.ex.isTimed ? 0 : units.toKg(v.weight), reps: v.reps)
             drafts[roundKey(st, r)] = nil
         }
         try? context.save()
@@ -534,9 +538,7 @@ struct TodayView: View {
         let w: Double = drafts[id]?.weight ?? displayWeight(sug.kg)
         let r: Int = drafts[id]?.reps ?? sug.reps
         return HStack(spacing: 4) {
-            weightControl(id: id, weight: w, reps: r)
-            Text("×").foregroundStyle(.secondary)
-            repsControl(id: id, weight: w, reps: r)
+            amountControls(s.ex, key: id, weight: w, reps: r)
             Spacer(minLength: 4)
             logButton(s, weight: w, reps: r)
         }
@@ -568,23 +570,25 @@ struct TodayView: View {
         }
     }
 
-    private func repsControl(id: String, weight w: Double, reps r: Int) -> some View {
-        HStack(spacing: 4) {
-            miniButton("minus", label: "Fewer reps") {
-                drafts[id] = Draft(weight: w, reps: max(1, r - 1))
+    // Reps, or seconds for timed exercises (5 s steps, shown as "30 s").
+    private func repsControl(id: String, weight w: Double, reps r: Int, timed: Bool = false) -> some View {
+        let step: Int = timed ? 5 : 1
+        return HStack(spacing: 4) {
+            miniButton("minus", label: timed ? "Less time" : "Fewer reps") {
+                drafts[id] = Draft(weight: w, reps: max(step, r - step))
             }
-            Text(String(r))
+            Text(timed ? "\(r) s" : String(r))
                 .font(.body.weight(.semibold)).monospacedDigit()
-                .frame(minWidth: 22)
-            miniButton("plus", label: "More reps") {
-                drafts[id] = Draft(weight: w, reps: r + 1)
+                .frame(minWidth: timed ? 36 : 22)
+            miniButton("plus", label: timed ? "More time" : "More reps") {
+                drafts[id] = Draft(weight: w, reps: r + step)
             }
         }
     }
 
     private func logButton(_ s: ExState, weight w: Double, reps r: Int) -> some View {
         Button {
-            logSet(s.ex, 1, kg: units.toKg(w), reps: r)
+            logSet(s.ex, 1, kg: s.ex.isTimed ? 0 : units.toKg(w), reps: r)
             drafts[s.ex.id] = nil
         } label: {
             Text("Log")
@@ -601,8 +605,8 @@ struct TodayView: View {
             Image(systemName: icon)
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Tone.ink)
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(Color(.systemGray6)))
+                .frame(width: 26, height: 26)   // plain − / +, no background
+                .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
         .accessibilityLabel(label)
@@ -658,7 +662,7 @@ struct TodayView: View {
     private func setButtonRow(_ s: ExState, _ n: Int) -> some View {
         let log = s.logged[n]
         let sug = suggestion(s, n)
-        let value: String = log.map { setText($0.weightKg, $0.reps) } ?? (sug.known ? setText(sug.kg, sug.reps) : "Tap to enter")
+        let value: String = log.map { setText($0.weightKg, $0.reps, s.ex) } ?? (sug.known ? setText(sug.kg, sug.reps, s.ex) : "Tap to enter")
         return Button {
             if let log {
                 withAnimation {
@@ -935,8 +939,15 @@ struct TodayView: View {
         return v == v.rounded() ? String(Int(v)) : String(v)
     }
 
-    private func setText(_ kg: Double, _ reps: Int) -> String {
-        kg > 0 ? "\(format(kg)) \(units.label) × \(reps)" : "BW × \(reps)"
+    private func setText(_ kg: Double, _ reps: Int, _ ex: ExerciseTemplate? = nil) -> String {
+        if ex?.isTimed == true { return "\(reps) s" }
+        return kg > 0 ? "\(format(kg)) \(units.label) × \(reps)" : "BW × \(reps)"
+    }
+
+    // Short form for superset rounds: "10×12", "BW×8", "30 s".
+    private func compactText(_ kg: Double, _ reps: Int, _ ex: ExerciseTemplate) -> String {
+        if ex.isTimed { return "\(reps) s" }
+        return kg > 0 ? "\(format(kg))×\(reps)" : "BW×\(reps)"
     }
 }
 
@@ -974,14 +985,21 @@ struct InlineSetEditor: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Set \(edit.setNumber)").font(.subheadline.weight(.semibold))
 
-            stepperRow(title: "Weight",
-                       value: edit.weight == 0 ? "BW" : "\(weightText) \(units.label)",
-                       minus: { edit.weight = max(0, edit.weight - step) },
-                       plus: { edit.weight += step })
-            stepperRow(title: "Reps",
-                       value: "\(edit.reps)",
-                       minus: { edit.reps = max(0, edit.reps - 1) },
-                       plus: { edit.reps += 1 })
+            if edit.exercise.isTimed {
+                stepperRow(title: "Time",
+                           value: "\(edit.reps) s",
+                           minus: { edit.reps = max(5, edit.reps - 5) },
+                           plus: { edit.reps += 5 })
+            } else {
+                stepperRow(title: "Weight",
+                           value: edit.weight == 0 ? "BW" : "\(weightText) \(units.label)",
+                           minus: { edit.weight = max(0, edit.weight - step) },
+                           plus: { edit.weight += step })
+                stepperRow(title: "Reps",
+                           value: "\(edit.reps)",
+                           minus: { edit.reps = max(0, edit.reps - 1) },
+                           plus: { edit.reps += 1 })
+            }
 
             HStack(spacing: 16) {
                 if edit.isLogged {
@@ -1011,14 +1029,14 @@ struct InlineSetEditor: View {
         HStack(spacing: 10) {
             Text(title).font(.subheadline).foregroundStyle(.secondary)
             Spacer()
-            Button(action: minus) { Image(systemName: "minus").frame(width: 28, height: 22) }
-                .buttonStyle(.bordered)
+            Button(action: minus) { Image(systemName: "minus").frame(width: 28, height: 28).contentShape(Rectangle()) }
+                .buttonStyle(.borderless)
                 .buttonRepeatBehavior(.enabled)
             Text(value)
                 .font(.headline).monospacedDigit()
                 .frame(minWidth: 64)
-            Button(action: plus) { Image(systemName: "plus").frame(width: 28, height: 22) }
-                .buttonStyle(.bordered)
+            Button(action: plus) { Image(systemName: "plus").frame(width: 28, height: 28).contentShape(Rectangle()) }
+                .buttonStyle(.borderless)
                 .buttonRepeatBehavior(.enabled)
         }
         .tint(.primary)
@@ -1634,4 +1652,10 @@ struct ExerciseHowToView: View {
             .map(\.name)
         return names.isEmpty ? nil : names.joined(separator: " and ")
     }
+}
+
+// Timed exercises (plank, side plank): the plan's reps are in seconds ("30–40 s", "20–30 s / side").
+// They have no weight; the number logged is seconds.
+extension ExerciseTemplate {
+    var isTimed: Bool { reps.hasSuffix(" s") || reps.contains(" s /") }
 }
