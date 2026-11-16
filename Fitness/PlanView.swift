@@ -278,13 +278,23 @@ struct WorkoutTemplateEditor: View {
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: 140)
             }
+            // Our own divider to the next exercise, with the link pill in the middle of it.
+            if !isLast { linkDivider(i).padding(.top, 6) }
         }
-        .padding(.vertical, 4)
-        // The link between this exercise and the one above sits on the line between them.
-        .overlay(alignment: .top) {
-            if i > 0 { linkControl(i - 1).offset(y: -27) }
+        .padding(.top, 4)
+        .padding(.bottom, isLast ? 4 : 0)
+        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: isLast ? 12 : 0, trailing: 20))
+        .listRowSeparator(isLast ? .automatic : .hidden, edges: .bottom)   // replaced by linkDivider
+    }
+
+    // ———— + Link as superset ———— (or ———— Unlink ————)
+    private func linkDivider(_ i: Int) -> some View {
+        HStack(spacing: 8) {
+            Rectangle().fill(Color(.separator)).frame(height: 0.5)
+            linkControl(i).fixedSize()
+            Rectangle().fill(Color(.separator)).frame(height: 0.5)
         }
-        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
+        .frame(height: 24)
     }
 
     private func setsBinding(_ i: Int) -> Binding<Int> {
@@ -316,7 +326,6 @@ struct WorkoutTemplateEditor: View {
                 )
         }
         .buttonStyle(.borderless)
-        .frame(maxWidth: .infinity)
     }
 
     // iOS has already moved the row on screen when you let go, so apply the new order straight
