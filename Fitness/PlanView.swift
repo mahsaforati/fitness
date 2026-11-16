@@ -152,6 +152,7 @@ struct WorkoutTemplateEditor: View {
         } message: {
             Text("It's removed from your plan. Sets you've already logged are kept.")
         }
+        .environment(\.editMode, $editMode)
         .navigationTitle(shown?.name ?? "Workout")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isEditing)
@@ -171,12 +172,8 @@ struct WorkoutTemplateEditor: View {
             let list = draftBinding.wrappedValue.exercises
             ForEach(Array(list.enumerated()), id: \.element.id) { i, ex in
                 editRow(i, ex, isLast: i == list.count - 1)
-                    // Drop a dragged exercise here to move it to this spot.
-                    .dropDestination(for: String.self) { items, _ in
-                        guard let id = items.first else { return false }
-                        return moveExercise(id, to: i)
-                    }
             }
+            .onMove { from, to in draftBinding.wrappedValue.exercises.move(fromOffsets: from, toOffset: to) }
         } else {
             ForEach(saved?.exercises ?? []) { ex in
                 exerciseRow(ex)
@@ -184,24 +181,11 @@ struct WorkoutTemplateEditor: View {
         }
     }
 
-    // One exercise while editing: ≡ handle, name and remove, then sets (− / +) and reps, then the
-    // superset link to the next exercise. Drag the ≡ handle (only) onto another exercise to move it there.
+    // One exercise while editing: name and remove, then sets (− / +) and reps, then the
+    // superset link to the next exercise. Drag the ≡ handle to reorder.
     private func editRow(_ i: Int, _ ex: ExerciseTemplate, isLast: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                // Drag handle: moving only starts from here.
-                Image(systemName: "line.3.horizontal")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 30)
-                    .contentShape(Rectangle())
-                    .draggable(ex.id) {
-                        Text(ex.name)
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 12).padding(.vertical, 8)
-                            .background(Capsule().fill(Color(.secondarySystemGroupedBackground)))
-                    }
-                    .accessibilityLabel("Move \(ex.name)")
+            HStack {
                 Text(ex.name).font(.subheadline.weight(.semibold))
                 Spacer()
                 Button {
@@ -261,18 +245,6 @@ struct WorkoutTemplateEditor: View {
                 Spacer()
             }
         }
-    }
-
-    // Move the exercise with this ID to position `target` (dropped on that row).
-    private func moveExercise(_ id: String, to target: Int) -> Bool {
-        var ex = draftBinding.wrappedValue.exercises
-        guard let from = ex.firstIndex(where: { $0.id == id }), from != target,
-              ex.indices.contains(target) else { return false }
-        withAnimation {
-            ex.move(fromOffsets: IndexSet(integer: from), toOffset: from < target ? target + 1 : target)
-            draftBinding.wrappedValue.exercises = ex
-        }
-        return true
     }
 
     // Put exercises a and b (next to each other) in the same superset.
