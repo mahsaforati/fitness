@@ -70,6 +70,7 @@ struct TodayView: View {
             }
             addExerciseSection
         }
+        .environment(\.defaultMinListRowHeight, 0)   // lets the rest line sit close under the exercise name
     }
 
     private func openWorkouts() { showingWorkouts = true }
@@ -274,7 +275,8 @@ struct TodayView: View {
             .buttonStyle(.borderless)
             howButton(s)
         }
-        .padding(.vertical, 4)
+        .padding(.top, 4)
+        .padding(.bottom, isResting(s) ? 0 : 4)
         // No divider between the name and the rest line under it.
         .listRowSeparator(isResting(s) ? .hidden : .automatic, edges: .bottom)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
@@ -315,6 +317,7 @@ struct TodayView: View {
                      add: { changeRest(end, by: 10) },
                      subtract: { changeRest(end, by: -10) })
                 .listRowSeparator(.hidden, edges: .top)
+                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))   // tight under the name
                 .transition(.opacity)
         }
     }
