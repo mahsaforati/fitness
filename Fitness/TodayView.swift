@@ -40,8 +40,8 @@ struct TodayView: View {
 
     private var today: Date { .now }
     private var dayStart: Date { Calendar.current.startOfDay(for: .now) }
-    private var scheduled: WorkoutTemplate { PlanTemplate.scheduledWorkout(for: today) }
-    private var planned: WorkoutTemplate { PlanTemplate.workout(for: today, override: overrideRaw) }
+    private var scheduled: WorkoutTemplate { PlanTemplate.scheduledWorkout(for: today, logs: allLogs) }
+    private var planned: WorkoutTemplate { PlanTemplate.workout(for: today, override: overrideRaw, logs: allLogs) }
     private var editKey: String { PlanTemplate.editKey(today, planned.id) }
     private var dayEdit: DayEdit { PlanTemplate.edits(from: editsRaw)[editKey] ?? DayEdit() }
     // What you're doing today: the plan with today's removals/additions. The plan itself is untouched.
@@ -1516,15 +1516,10 @@ private struct WorkoutsSheet: View {
         }
     }
 
-    // Title, a badge for today / scheduled, then a short preview of the exercises.
+    // Title, then a short preview of the exercises.
     private func card(_ w: WorkoutTemplate) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(w.title).font(.headline)
-                Spacer()
-                if w.id == todayID { badge("Today") }
-                else if w.id == scheduledID { badge("Scheduled") }
-            }
+            Text(w.title).font(.headline)
             Text("\(w.exercises.count) exercises · \(w.exercises.reduce(0) { $0 + $1.sets }) sets")
                 .font(.caption).foregroundStyle(.secondary)
             Text(w.exercises.map(\.name).joined(separator: " · "))
@@ -1534,13 +1529,6 @@ private struct WorkoutsSheet: View {
         .padding(.vertical, 4)
     }
 
-    private func badge(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(Tone.check)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Capsule().fill(Tone.done))
-    }
 }
 
 private struct WorkoutPreview: View {
@@ -1570,24 +1558,15 @@ private struct WorkoutPreview: View {
         .navigationTitle(workout.title)
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
-            if isToday {
-                Label("This is today's workout", systemImage: "checkmark.circle.fill")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Tone.check)
+            Button(action: onPick) {
+                Text("Let's Do This!")
+                    .font(.headline)
+                    .foregroundStyle(Tone.ink)
                     .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(Capsule().fill(Tone.done))
-                    .padding(.horizontal).padding(.bottom, 8)
-            } else {
-                Button(action: onPick) {
-                    Text(isScheduled ? "Go back to the scheduled workout" : "Do this workout today")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Capsule().fill(Color(red: 0.478, green: 0.545, blue: 0.455)))
-                }
-                .buttonStyle(.borderless)
-                .padding(.horizontal).padding(.bottom, 8)
+                    .background(Capsule().fill(Color(.systemGray5)))
             }
+            .buttonStyle(.borderless)
+            .padding(.horizontal).padding(.bottom, 8)
         }
     }
 }

@@ -40,17 +40,29 @@ enum PlanTemplate {
     }
 
     // Mon/Tue = A, Wed/Thu = B, Fri–Sun = C.
-    static func scheduledWorkout(for date: Date) -> WorkoutTemplate {
-        switch Calendar.current.component(.weekday, from: date) {
-        case 2, 3: return phase1[0]
-        case 4, 5: return phase1[1]
-        default:   return phase1[2]
-        }
+    // Up next goes in order, not by weekday: after the last workout you logged on an earlier day
+    // comes the next one (A → B → C → A…). Nothing logged yet → A.
+    // Workouts logged today don't move it on until tomorrow, so today's workout stays put.
+    static func scheduledWorkout(for date: Date, logs: [SetLog]) -> WorkoutTemplate {
+        let dayStart = Calendar.current.startOfDay(for: date)
+        let lastID = logs
+            .filter { $0.date < dayStart }
+            .sorted { $0.date > $1.date }
+            .lazy
+            .compactMap { workoutID(containing: $0.exerciseID) }
+            .first
+        guard let lastID, let i = phase1.firstIndex(where: { $0.id == lastID }) else { return phase1[0] }
+        return phase1[(i + 1) % phase1.count]
+    }
+
+    // Which plan workout an exercise belongs to (exercises added from the library don't count).
+    static func workoutID(containing exerciseID: String) -> String? {
+        phase1.first { w in w.exercises.contains { $0.id == exerciseID } }?.id
     }
 
     // MARK: Swap today's workout
     // The choice is saved with the day it was made ("2026-11-13|B"),
-    // so it applies only to that day and the schedule resumes tomorrow.
+    // so it applies only to that day; tomorrow the next one in order comes up.
 
     static let overrideKey = "workoutOverride"
 
@@ -65,9 +77,9 @@ enum PlanTemplate {
         return parts[1]
     }
 
-    static func workout(for date: Date, override stored: String) -> WorkoutTemplate {
+    static func workout(for date: Date, override stored: String, logs: [SetLog]) -> WorkoutTemplate {
         if let id = overrideID(from: stored, on: date), let w = workout(id: id) { return w }
-        return scheduledWorkout(for: date)
+        return scheduledWorkout(for: date, logs: logs)
     }
 }
 

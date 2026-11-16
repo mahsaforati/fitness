@@ -33,3 +33,5 @@ Requires iOS 17+.
 - Excel (.xlsx) plan import
 - Realistic female-figure animations with muscle highlighting (replace the placeholder stick figure)
 - **Timed exercises** (plank, side plank): no weight, just seconds (− / + in 5 s steps, shown as "30 s")
+- **Up next goes in order**: Today shows the workout after the one you last did on an earlier day (A → B → C → A…), not by weekday. Nothing logged yet → A
+- **Your workouts** list has no Today/Scheduled labels; opening one shows its exercises and a **Let's Do This!** button that makes it today's workout
