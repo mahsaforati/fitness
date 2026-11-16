@@ -275,9 +275,13 @@ struct TodayView: View {
             howButton(s)
         }
         .padding(.vertical, 4)
+        // No divider between the name and the rest line under it.
+        .listRowSeparator(isResting(s) ? .hidden : .automatic, edges: .bottom)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
     }
+
+    private func isResting(_ s: ExState) -> Bool { restEnd != nil && restFor == s.ex.id }
 
     @ViewBuilder
     private func howButton(_ s: ExState) -> some View {
@@ -310,6 +314,7 @@ struct TodayView: View {
             RestLine(end: end, total: restTotal,
                      add: { changeRest(end, by: 10) },
                      subtract: { changeRest(end, by: -10) })
+                .listRowSeparator(.hidden, edges: .top)
                 .transition(.opacity)
         }
     }
