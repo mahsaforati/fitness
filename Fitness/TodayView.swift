@@ -26,6 +26,7 @@ struct TodayView: View {
     @State private var pendingRemoval: ExerciseTemplate?
     @State private var confirmingReset = false
     @State private var showingWorkouts = false
+    @State private var justFinished: String?   // exercise showing "✓ Done" for a moment before the next one opens
     // First-set numbers changed with − / + before logging (in the units shown), by exercise ID.
     private struct Draft { var weight: Double; var reps: Int }
     @State private var drafts: [String: Draft] = [:]
@@ -253,6 +254,13 @@ struct TodayView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.borderless)
+
+            if justFinished == s.ex.id {
+                Label("Done", systemImage: "checkmark.circle.fill")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Tone.check)
+                    .transition(.opacity.combined(with: .scale))
+            }
 
             if ExerciseLibrary.info(for: s.ex.id) != nil || ExerciseCatalog.exercise(id: s.ex.id) != nil {
                 Button { path.append(s.ex) } label: {
@@ -631,11 +639,23 @@ struct TodayView: View {
 
     // Close the finished exercise and open the next one that isn't done
     // (another exercise in the same superset first, so the superset stays open until all of it is done).
+    // An exercise just got all its sets: keep it open for a moment with "✓ Done" so it's clear it's finished,
+    // then slowly close it and open the next one.
     private func advance(from ex: ExerciseTemplate) {
-        let partners = PlanTemplate.supersetGroup(of: ex, in: workout)
-        let next = partners.first { $0.id != ex.id && !state(for: $0).done }
-            ?? workout.exercises.first { $0.id != ex.id && !state(for: $0).done }
-        withAnimation { expandedID = next?.id ?? ""; editing = nil }
+        editing = nil
+        expandedID = ex.id
+        withAnimation(.easeOut(duration: 0.3)) { justFinished = ex.id }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard justFinished == ex.id else { return }   // something else happened meanwhile
+            let partners = PlanTemplate.supersetGroup(of: ex, in: workout)
+            let next = partners.first { $0.id != ex.id && !state(for: $0).done }
+                ?? workout.exercises.first { $0.id != ex.id && !state(for: $0).done }
+            withAnimation(.easeInOut(duration: 0.7)) {
+                expandedID = next?.id ?? ""
+                justFinished = nil
+            }
+        }
     }
 
     // MARK: - Formatting
