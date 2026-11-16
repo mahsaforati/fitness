@@ -59,6 +59,7 @@ struct CalendarView: View {
             .listRowSeparator(.hidden)
           }
           .environment(\.defaultMinListRowHeight, 0)
+          .navigationTitle("Calendar")   // like the other tabs; without a title the hidden bar still took space
           .toolbar(.hidden, for: .navigationBar)
         }
     }
