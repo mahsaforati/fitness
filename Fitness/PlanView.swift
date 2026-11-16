@@ -35,8 +35,6 @@ struct PlanView: View {
                     }
                 } header: {
                     Text("Workouts")
-                } footer: {
-                    Text("Tap a workout to see it; tap Edit there to change it. Workouts come up on Today in this order (A → B → C …).")
                 }
 
                 if !templatesRaw.isEmpty {
