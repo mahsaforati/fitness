@@ -8,6 +8,15 @@ struct PlanView: View {
 
     private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
 
+    // A new workout gets the next free letter: D, E… (or W27, W28… after Z).
+    private var nextWorkoutID: String {
+        let used = Set(workouts.map(\.id))
+        for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" where !used.contains(String(c)) { return String(c) }
+        var n = 27
+        while used.contains("W\(n)") { n += 1 }
+        return "W\(n)"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -28,10 +37,13 @@ struct PlanView: View {
                             }
                         }
                     }
+                    NavigationLink(value: "new:" + nextWorkoutID) {
+                        Label("New workout", systemImage: "plus")
+                    }
                 } header: {
                     Text("Workouts")
                 } footer: {
-                    Text("Tap a workout to see it and change its exercises, sets and reps. Changes apply from your next session.")
+                    Text("Tap a workout to see it; tap Edit there to change it. Workouts come up on Today in this order (A → B → C …).")
                 }
 
                 if !templatesRaw.isEmpty {
@@ -41,8 +53,12 @@ struct PlanView: View {
                 }
             }
             .navigationTitle("Your plan")
-            .navigationDestination(for: String.self) { id in
-                WorkoutTemplateEditor(workoutID: id)
+            .navigationDestination(for: String.self) { value in
+                if value.hasPrefix("new:") {
+                    WorkoutTemplateEditor(workoutID: String(value.dropFirst(4)), isNew: true)
+                } else {
+                    WorkoutTemplateEditor(workoutID: value)
+                }
             }
             .confirmationDialog("Reset all workouts to the original plan?", isPresented: $confirmingReset,
                                 titleVisibility: .visible) {
@@ -62,6 +78,9 @@ private struct ExerciseRef: Hashable, Identifiable { let id: String }
 
 struct WorkoutTemplateEditor: View {
     let workoutID: String
+    var isNew: Bool = false                              // a new workout: starts in edit mode, saved on ✓
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDelete = false
     @AppStorage(PlanTemplate.templatesKey) private var templatesRaw = ""
     @State private var draft: WorkoutTemplate?          // non-nil while editing
     @State private var editMode: EditMode = .inactive
@@ -97,6 +116,18 @@ struct WorkoutTemplateEditor: View {
                      ? "Tap an exercise to change its sets, reps or superset. Drag to reorder, or tap ⊖ to remove. Tap ✓ to save."
                      : "Tap Edit to change this workout.")
             }
+            if isEditing && saved != nil && workouts.count > 1 {
+                Section {
+                    Button("Delete workout", role: .destructive) { confirmingDelete = true }
+                }
+            }
+        }
+        .onAppear(perform: startNewIfNeeded)
+        .confirmationDialog("Delete \(saved?.title ?? "this workout")?", isPresented: $confirmingDelete,
+                            titleVisibility: .visible) {
+            Button("Delete workout", role: .destructive, action: deleteWorkout)
+        } message: {
+            Text("It's removed from your plan. Sets you've already logged are kept.")
         }
         .environment(\.editMode, $editMode)
         .navigationTitle(shown?.title ?? "Workout")
@@ -162,10 +193,30 @@ struct WorkoutTemplateEditor: View {
     }
 
     private func cancel() {
+        if isNew && saved == nil {   // never saved: nothing to go back to
+            dismiss()
+            return
+        }
         withAnimation {
             draft = nil
             editMode = .inactive
         }
+    }
+
+    private func startNewIfNeeded() {
+        guard isNew, saved == nil, draft == nil else { return }
+        draft = WorkoutTemplate(id: workoutID, title: "Workout \(workoutID)", exercises: [])
+        editMode = .active
+    }
+
+    private func deleteWorkout() {
+        var all = workouts
+        all.removeAll { $0.id == workoutID }
+        guard !all.isEmpty else { return }
+        templatesRaw = PlanTemplate.encodeTemplates(all)
+        draft = nil
+        editMode = .inactive
+        dismiss()
     }
 
     private func save() {
@@ -173,7 +224,11 @@ struct WorkoutTemplateEditor: View {
         edited.title = edited.title.trimmingCharacters(in: .whitespaces)
         if edited.title.isEmpty { edited.title = saved?.title ?? "Workout \(workoutID)" }
         var all = workouts
-        if let i = all.firstIndex(where: { $0.id == workoutID }) { all[i] = edited }
+        if let i = all.firstIndex(where: { $0.id == workoutID }) {
+            all[i] = edited
+        } else {
+            all.append(edited)   // a new workout joins the end of the plan
+        }
         templatesRaw = PlanTemplate.encodeTemplates(all)
         withAnimation {
             draft = nil
