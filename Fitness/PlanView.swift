@@ -300,7 +300,7 @@ struct ExerciseTemplateEditor: View {
                     Text(ex.name).font(.headline)
                 }
                 Section {
-                    Stepper("Sets: \(ex.sets)", value: setsBinding, in: 1...10)
+                    PlainStepper(title: "Sets", value: setsBinding, range: 1...10, step: 1) { "\($0)" }
                     HStack {
                         Text(ex.isTimed ? "Time" : "Reps")
                         Spacer()
@@ -367,14 +367,9 @@ struct SettingsView: View {
                     .pickerStyle(.segmented)
                 }
                 Section("Rest timer") {
-                    Stepper(value: $restSeconds, in: 10...300, step: 10) {
-                        HStack {
-                            Text("Rest between sets")
-                            Spacer()
-                            Text(clock(restSeconds)).monospacedDigit().foregroundStyle(.secondary)
-                        }
-                    }
-
+                    PlainStepper(title: "Rest between sets", value: $restSeconds,
+                                 range: 10...300, step: 10) { clock($0) }
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -385,4 +380,51 @@ struct SettingsView: View {
     }
 
     private func clock(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
+}
+
+// A row with a label, then plain − value + (no grey control), like the − / + on Today.
+// Hold − or + to keep changing.
+struct PlainStepper: View {
+    let title: String
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    let step: Int
+    let format: (Int) -> String
+
+    init(title: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int,
+         format: @escaping (Int) -> String) {
+        self.title = title
+        self._value = value
+        self.range = range
+        self.step = step
+        self.format = format
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(title)
+            Spacer()
+            button("minus", label: "Less") { value = max(range.lowerBound, value - step) }
+                .opacity(value <= range.lowerBound ? 0.3 : 1)
+            Text(format(value))
+                .font(.body.weight(.semibold))
+                .monospacedDigit()
+                .frame(minWidth: 44)
+            button("plus", label: "More") { value = min(range.upperBound, value + step) }
+                .opacity(value >= range.upperBound ? 0.3 : 1)
+        }
+    }
+
+    private func button(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.primary)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .buttonRepeatBehavior(.enabled)
+        .accessibilityLabel("\(label) \(title.lowercased())")
+    }
 }
