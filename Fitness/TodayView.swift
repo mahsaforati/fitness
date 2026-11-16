@@ -26,6 +26,9 @@ struct TodayView: View {
     @State private var pendingRemoval: ExerciseTemplate?
     @State private var confirmingReset = false
     @State private var showingWorkouts = false
+    // First-set numbers changed with − / + before logging (in the units shown), by exercise ID.
+    private struct Draft { var weight: Double; var reps: Int }
+    @State private var drafts: [String: Draft] = [:]
     // Shared with WorkoutHeader: picking another workout after finishing brings back its Start button.
     @AppStorage("workoutTimerFinished") private var timerFinished = false
     @AppStorage("workoutTimerStarted") private var timerStarted = false
@@ -282,31 +285,33 @@ struct TodayView: View {
         }
     }
 
-    // "Set 1 · 45 lb × 12" pre-filled from last time, with a light grey Log button.
-    // Tap the numbers to change them before logging.
+    // First set: weight and reps pre-filled (last time, or a starting value) with − / + right in the row,
+    // then a light grey Log button.
     private func firstSetRow(_ s: ExState) -> some View {
         let sug = suggestion(s, 1)
-        let openEditor = {
-            withAnimation {
-                editing = SetEdit(exercise: s.ex, setNumber: 1, weight: displayWeight(sug.kg),
-                                  reps: sug.reps, isLogged: false)
+        let id = s.ex.id
+        let w = drafts[id]?.weight ?? displayWeight(sug.kg)
+        let r = drafts[id]?.reps ?? sug.reps
+        let step: Double = units == .imperial ? 5 : 2.5
+        return HStack(spacing: 4) {
+            miniButton("minus", label: "Less weight") { drafts[id] = Draft(weight: max(0, w - step), reps: r) }
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(w > 0 ? format(units.toKg(w)) : "BW")
+                    .font(.body.weight(.semibold)).monospacedDigit()
+                if w > 0 { Text(units.label).font(.caption).foregroundStyle(.secondary) }
             }
-        }
-        return HStack(spacing: 10) {
-            Button(action: openEditor) {
-                HStack {
-                    Text("Set 1").foregroundStyle(.secondary)
-                    Spacer()
-                    Text(sug.known ? setText(sug.kg, sug.reps) : "Tap to enter")
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.leading, 8)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
+            .frame(minWidth: 44)
+            miniButton("plus", label: "More weight") { drafts[id] = Draft(weight: w + step, reps: r) }
+            Text("×").foregroundStyle(.secondary)
+            miniButton("minus", label: "Fewer reps") { drafts[id] = Draft(weight: w, reps: max(1, r - 1)) }
+            Text("\(r)")
+                .font(.body.weight(.semibold)).monospacedDigit()
+                .frame(minWidth: 22)
+            miniButton("plus", label: "More reps") { drafts[id] = Draft(weight: w, reps: r + 1) }
+            Spacer(minLength: 4)
             Button {
-                if sug.known { logSet(s.ex, 1, kg: sug.kg, reps: sug.reps) } else { openEditor() }
+                logSet(s.ex, 1, kg: units.toKg(w), reps: r)
+                drafts[id] = nil
             } label: {
                 Text("Log")
                     .font(.subheadline.weight(.semibold))
@@ -316,6 +321,18 @@ struct TodayView: View {
             }
             .buttonStyle(.borderless)
         }
+    }
+
+    private func miniButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Tone.ink)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(Color(.systemGray6)))
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(label)
     }
 
     // Repeat logs another set with the numbers of the last one; Add opens a new set to change first.
@@ -551,6 +568,7 @@ struct TodayView: View {
         withAnimation {
             for ex in workout.exercises { deleteTodaysLogs(of: ex.id) }
             extraSets = [:]
+            drafts = [:]
             editing = nil
             expandedID = nil
             restEnd = nil
