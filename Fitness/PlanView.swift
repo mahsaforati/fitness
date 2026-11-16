@@ -69,9 +69,10 @@ struct PlanView: View {
 }
 
 // MARK: - One workout
-// Opens read-only. Edit makes a working copy and shows everything on one page: the name as a big
-// title, and for each exercise its sets (− / +), reps, remove, and a link to make a superset with
-// the next one. Drag ≡ to reorder. Nothing is saved until ✓; ✕ throws the copy away.
+// Opens read-only. Edit makes a working copy: rename, add, remove, reorder (drag), and tap an
+// exercise to change its sets, reps or superset. Nothing is saved until ✓; ✕ throws the copy away.
+
+private struct ExerciseRef: Hashable, Identifiable { let id: String }
 
 struct WorkoutTemplateEditor: View {
     let workoutID: String
@@ -82,6 +83,7 @@ struct WorkoutTemplateEditor: View {
     @State private var draft: WorkoutTemplate?          // non-nil while editing
     @State private var editMode: EditMode = .inactive
     @State private var showingAdd = false
+    @State private var editingExercise: ExerciseRef?
 
     private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
     private var saved: WorkoutTemplate? { workouts.first { $0.id == workoutID } }
@@ -102,36 +104,29 @@ struct WorkoutTemplateEditor: View {
     var body: some View {
         List {
             if isEditing {
-                // Big editable title, with the focus (worked out from the exercises) under it.
                 Section {
-                    VStack(alignment: .leading, spacing: 4) {
-                        TextField("Workout name", text: nameBinding)
-                            .font(.title2.bold())
-                        Text("\(draftBinding.wrappedValue.focus) · set automatically")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                    TextField("Workout name", text: nameBinding)
+                } header: {
+                    Text("Name")
+                } footer: {
+                    Text("Focus: \(draftBinding.wrappedValue.focus) — worked out from the exercises.")
                 }
             } else if let w = saved {
                 Section {
                     LabeledContent("Focus", value: w.focus)
                 }
             }
-            exerciseSections
-            if isEditing {
-                Section {
-                    Button { showingAdd = true } label: {
-                        Text("Add exercise")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.primary)
-                            .frame(maxWidth: .infinity, minHeight: 40)
-                            .background(Capsule().fill(Color(.systemGray5)))
-                    }
-                    .buttonStyle(.borderless)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets())
+            Section {
+                exerciseRows
+                if isEditing {
+                    Button { showingAdd = true } label: { Label("Add exercise", systemImage: "plus") }
                 }
+            } header: {
+                Text("Exercises")
+            } footer: {
+                Text(isEditing
+                     ? "Tap an exercise to change its sets, reps or superset. Drag to reorder, or tap ⊖ to remove. Tap ✓ to save."
+                     : "Tap Edit to change this workout.")
             }
             if isEditing && saved != nil && workouts.count > 1 {
                 Section {
@@ -151,6 +146,9 @@ struct WorkoutTemplateEditor: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isEditing)
         .toolbar { toolbarContent }
+        .navigationDestination(item: $editingExercise) { ref in
+            ExerciseTemplateEditor(workout: draftBinding, exerciseID: ref.id)
+        }
         .sheet(isPresented: $showingAdd) {
             AddExerciseSheet(current: Set(shown?.exercises.map(\.id) ?? [])) { ex in
                 var added = ex
@@ -160,174 +158,27 @@ struct WorkoutTemplateEditor: View {
         }
     }
 
-    // Exercises in cards: runs of normal exercises share a card; each superset gets its own card
-    // labelled "Superset". Drag (iOS handles) reorders within a card; long-press → Move up / down
-    // moves an exercise across cards.
-    private struct ExerciseGroup: Identifiable {
-        let range: Range<Int>
-        let isSuperset: Bool
-        var id: Int { range.lowerBound }
-    }
-
-    private func groups(_ list: [ExerciseTemplate]) -> [ExerciseGroup] {
-        var out: [ExerciseGroup] = []
-        var i = 0
-        while i < list.count {
-            var j = i + 1
-            if let tag = list[i].superset {
-                while j < list.count, list[j].superset == tag { j += 1 }
-            }
-            let isSuperset = j - i > 1
-            if !isSuperset {
-                // a run of normal exercises (or lone superset leftovers) shares one card
-                while j < list.count {
-                    if let t = list[j].superset, j + 1 < list.count, list[j + 1].superset == t { break }
-                    j += 1
-                }
-            }
-            out.append(ExerciseGroup(range: i..<j, isSuperset: isSuperset))
-            i = j
-        }
-        return out
-    }
-
     @ViewBuilder
-    private var exerciseSections: some View {
-        let list: [ExerciseTemplate] = (isEditing ? draftBinding.wrappedValue.exercises : saved?.exercises) ?? []
-        let all = groups(list)
-        ForEach(all) { g in
-            Section {
-                if isEditing {
-                    ForEach(Array(g.range), id: \.self) { i in
-                        editRow(i, list[i], isLast: i == list.count - 1)
-                            .contextMenu { moveMenu(i, count: list.count) }
+    private var exerciseRows: some View {
+        if isEditing {
+            ForEach(draftBinding.wrappedValue.exercises) { ex in
+                Button { editingExercise = ExerciseRef(id: ex.id) } label: {
+                    HStack {
+                        exerciseRow(ex)
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.footnote).foregroundStyle(.tertiary)
                     }
-                    .onMove { from, to in
-                        let start = g.range.lowerBound
-                        draftBinding.wrappedValue.exercises.move(
-                            fromOffsets: IndexSet(from.map { $0 + start }), toOffset: to + start)
-                    }
-                } else {
-                    ForEach(Array(g.range), id: \.self) { i in
-                        exerciseRow(list[i])
-                    }
+                    .contentShape(Rectangle())
                 }
-            } header: {
-                if g.isSuperset {
-                    Label("Superset", systemImage: "arrow.triangle.2.circlepath")
-                } else if g.id == 0 {
-                    Text("Exercises")
-                }
-            } footer: {
-                if !isEditing && g.id == all.last?.id { Text("Tap Edit to change this workout.") }
+                .foregroundStyle(Color.primary)
+            }
+            .onMove { from, to in draftBinding.wrappedValue.exercises.move(fromOffsets: from, toOffset: to) }
+            .onDelete { offsets in draftBinding.wrappedValue.exercises.remove(atOffsets: offsets) }
+        } else {
+            ForEach(saved?.exercises ?? []) { ex in
+                exerciseRow(ex)
             }
         }
-    }
-
-    @ViewBuilder
-    private func moveMenu(_ i: Int, count: Int) -> some View {
-        if i > 0 {
-            Button("Move up", systemImage: "arrow.up") { withAnimation { swapExercises(i, i - 1) } }
-        }
-        if i < count - 1 {
-            Button("Move down", systemImage: "arrow.down") { withAnimation { swapExercises(i, i + 1) } }
-        }
-    }
-
-    private func swapExercises(_ a: Int, _ b: Int) {
-        guard draftBinding.wrappedValue.exercises.indices.contains(a),
-              draftBinding.wrappedValue.exercises.indices.contains(b) else { return }
-        draftBinding.wrappedValue.exercises.swapAt(a, b)
-    }
-
-    // One exercise while editing: name and remove, then sets (− / +) and reps, then the
-    // superset link to the next exercise. Drag the ≡ handle to reorder.
-    private func editRow(_ i: Int, _ ex: ExerciseTemplate, isLast: Bool) -> some View {
-        HStack(alignment: .center, spacing: 6) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(ex.name).font(.subheadline.weight(.semibold))
-                PlainStepper(title: "Sets", value: setsBinding(i), range: 1...10, step: 1) { "\($0)" }
-                    .font(.subheadline)
-                HStack {
-                    Text(ex.isTimed ? "Time" : "Reps").font(.subheadline)
-                    Spacer()
-                    TextField("10–12", text: repsBinding(i))
-                        .multilineTextAlignment(.trailing)
-                        .font(.subheadline.weight(.semibold))
-                        .frame(maxWidth: 140)
-                }
-                if !isLast { linkControl(i) }
-            }
-            // 🗑 on the right, centred, right next to the iOS reorder handle (≡).
-            Button {
-                withAnimation { _ = draftBinding.wrappedValue.exercises.remove(at: i) }
-            } label: {
-                Image(systemName: "trash").font(.footnote).foregroundStyle(.secondary)
-                    .frame(width: 30, height: 30).contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Remove \(ex.name)")
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func setsBinding(_ i: Int) -> Binding<Int> {
-        Binding(get: { draftBinding.wrappedValue.exercises[safe: i]?.sets ?? 3 },
-                set: { v in if draftBinding.wrappedValue.exercises.indices.contains(i) { draftBinding.wrappedValue.exercises[i].sets = v } })
-    }
-
-    private func repsBinding(_ i: Int) -> Binding<String> {
-        Binding(get: { draftBinding.wrappedValue.exercises[safe: i]?.reps ?? "" },
-                set: { v in if draftBinding.wrappedValue.exercises.indices.contains(i) { draftBinding.wrappedValue.exercises[i].reps = v } })
-    }
-
-    // "Link with next as superset", or "Superset with next · Unlink" when they're already linked.
-    @ViewBuilder
-    private func linkControl(_ i: Int) -> some View {
-        let list = draftBinding.wrappedValue.exercises
-        let linked = list[i].superset != nil && list[i].superset == list[i + 1].superset
-        HStack(spacing: 6) {
-            Image(systemName: linked ? "link" : "link.badge.plus")
-                .font(.caption).foregroundStyle(.secondary)
-            if linked {
-                Text("Superset with \(list[i + 1].name)").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Unlink") { withAnimation { unlink(after: i) } }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(Color.primary)
-            } else {
-                Button("Link with next as superset") { withAnimation { link(i, i + 1) } }
-                    .font(.caption.weight(.semibold))
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(Color.primary)
-                Spacer()
-            }
-        }
-    }
-
-    // Put exercises a and b (next to each other) in the same superset.
-    private func link(_ a: Int, _ b: Int) {
-        var ex = draftBinding.wrappedValue.exercises
-        let tag = ex[a].superset ?? ex[b].superset ?? "\(workoutID)-\(UUID().uuidString.prefix(6))"
-        let old = ex[b].superset
-        ex[a].superset = tag
-        ex[b].superset = tag
-        // If b was already in a superset with the ones after it, bring those along too.
-        if let old, old != tag {
-            for k in (b + 1)..<ex.count where ex[k].superset == old { ex[k].superset = tag }
-        }
-        draftBinding.wrappedValue.exercises = ex
-    }
-
-    // Split the superset between exercise i and i + 1: everything after i gets its own group.
-    private func unlink(after i: Int) {
-        var ex = draftBinding.wrappedValue.exercises
-        guard let tag = ex[i].superset else { return }
-        let newTag = "\(workoutID)-\(UUID().uuidString.prefix(6))"
-        var k = i + 1
-        while k < ex.count, ex[k].superset == tag { ex[k].superset = newTag; k += 1 }
-        draftBinding.wrappedValue.exercises = ex
     }
 
     @ToolbarContentBuilder
@@ -421,6 +272,81 @@ struct WorkoutTemplateEditor: View {
     }
 }
 
+// MARK: - One exercise in the workout being edited: sets, reps, superset
+// Changes go into the working copy; they're saved with the workout's ✓.
+
+struct ExerciseTemplateEditor: View {
+    @Binding var workout: WorkoutTemplate
+    let exerciseID: String
+
+    private var index: Int? { workout.exercises.firstIndex { $0.id == exerciseID } }
+
+    private var setsBinding: Binding<Int> {
+        Binding(get: { index.map { workout.exercises[$0].sets } ?? 3 },
+                set: { v in if let i = index { workout.exercises[i].sets = v } })
+    }
+    private var repsBinding: Binding<String> {
+        Binding(get: { index.map { workout.exercises[$0].reps } ?? "" },
+                set: { v in if let i = index { workout.exercises[i].reps = v } })
+    }
+
+    var body: some View {
+        Form {
+            if let i = index {
+                let ex = workout.exercises[i]
+                Section {
+                    Text(ex.name).font(.headline)
+                }
+                Section {
+                    PlainStepper(title: "Sets", value: setsBinding, range: 1...10, step: 1) { "\($0)" }
+                    HStack {
+                        Text(ex.isTimed ? "Time" : "Reps")
+                        Spacer()
+                        TextField("10–12", text: repsBinding)
+                            .multilineTextAlignment(.trailing)
+                            .foregroundStyle(.secondary)
+                    }
+                } footer: {
+                    Text("Reps can be a range like 10–12, \"8 / leg\", or a time like \"30–40 s\" for holds.")
+                }
+                Section {
+                    supersetControls(i)
+                } header: {
+                    Text("Superset")
+                } footer: {
+                    Text("Exercises in a superset are done back to back, one set of each, then rest.")
+                }
+            } else {
+                Text("This exercise isn't in the workout any more.").foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle(index.map { workout.exercises[$0].name } ?? "Exercise")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    @ViewBuilder
+    private func supersetControls(_ i: Int) -> some View {
+        let list = workout.exercises
+        let ex = list[i]
+        if ex.superset != nil {
+            Button("Take out of the superset", role: .destructive) { workout.exercises[i].superset = nil }
+        }
+        if i > 0, list[i - 1].superset == nil || list[i - 1].superset != ex.superset {
+            Button("Superset with \(list[i - 1].name) (above)") { join(i, with: i - 1) }
+        }
+        if i + 1 < list.count, list[i + 1].superset == nil || list[i + 1].superset != ex.superset {
+            Button("Superset with \(list[i + 1].name) (below)") { join(i, with: i + 1) }
+        }
+    }
+
+    // Put exercise `i` in the same superset as exercise `o` (giving `o` a new tag if it has none).
+    private func join(_ i: Int, with o: Int) {
+        let tag = workout.exercises[o].superset ?? "\(workout.id)-\(UUID().uuidString.prefix(6))"
+        workout.exercises[o].superset = tag
+        workout.exercises[i].superset = tag
+    }
+}
+
 // MARK: - Settings (⚙︎ on the Plan tab): units and rest time
 
 struct SettingsView: View {
@@ -510,8 +436,4 @@ struct PlainStepper: View {
         .buttonRepeatBehavior(.enabled)
         .accessibilityLabel("\(label) \(title.lowercased())")
     }
-}
-
-extension Array {
-    subscript(safe i: Int) -> Element? { indices.contains(i) ? self[i] : nil }
 }
