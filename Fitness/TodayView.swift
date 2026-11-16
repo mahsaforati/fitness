@@ -52,45 +52,65 @@ struct TodayView: View {
         overrideRaw = id == scheduled.id ? "" : "\(PlanTemplate.dayKey(today))|\(id)"
     }
 
+    // The body is split into small pieces so Xcode can type-check it quickly.
     var body: some View {
+        NavigationStack(path: $path) {
+            withFeedback(withDialogs(withNavigation(todayList)))
+        }
+    }
+
+    private var todayList: some View {
         let states = workout.exercises.map(state(for:))
         let doneCount = states.filter(\.done).count
         let openID = expandedID ?? states.first(where: { !$0.done })?.ex.id
-
-        NavigationStack(path: $path) {
-            List {
-                Section {
-                    WorkoutHeader(title: workout.title, done: doneCount, total: states.count,
-                                  showWorkouts: { showingWorkouts = true },
-                                  startOver: clearTodaysSets)
-                        .listRowBackground(Color.clear)
-                        // Its own alignment, separate from the exercises: 12pt in from the card edges on both sides.
-                        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
-                        .listRowSeparator(.hidden)
-                }
-
-                ForEach(blocks(states)) { b in
-                    blockSection(b, openID: openID)
-                }
-
-                Section {
-                    Button { showingAdd = true } label: {
-                        Label("Add exercise", systemImage: "plus.circle")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.primary)
-                    }
-                } footer: {
-                    if !dayEdit.isEmpty {
-                        HStack {
-                            Text(editSummary)
-                            Spacer()
-                            Button("Reset to plan") { confirmingReset = true }.font(.footnote.bold())
-                        }
-                    }
-                }
+        return List {
+            headerSection(done: doneCount, total: states.count)
+            ForEach(blocks(states)) { b in
+                blockSection(b, openID: openID)
             }
-            .navigationTitle(workout.title)          // used for the back button on pushed pages
-            .toolbar(.hidden, for: .navigationBar)   // Today draws its own title row (with the swap button)
+            addExerciseSection
+        }
+    }
+
+    private func headerSection(done: Int, total: Int) -> some View {
+        Section {
+            WorkoutHeader(title: workout.title, done: done, total: total,
+                          showWorkouts: { showingWorkouts = true },
+                          startOver: clearTodaysSets)
+                .listRowBackground(Color.clear)
+                // Its own alignment, separate from the exercises: 12pt in from the card edges on both sides.
+                .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+                .listRowSeparator(.hidden)
+        }
+    }
+
+    private var addExerciseSection: some View {
+        Section {
+            Button { showingAdd = true } label: {
+                Label("Add exercise", systemImage: "plus.circle")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+            }
+        } footer: {
+            editFooter
+        }
+    }
+
+    @ViewBuilder
+    private var editFooter: some View {
+        if !dayEdit.isEmpty {
+            HStack {
+                Text(editSummary)
+                Spacer()
+                Button("Reset to plan") { confirmingReset = true }
+                    .font(.footnote.bold())
+            }
+        }
+    }
+
+    private func withNavigation<V: View>(_ v: V) -> some View {
+        v.navigationTitle(workout.title)          // used for the back button on pushed pages
+            .toolbar(.hidden, for: .navigationBar)   // Today draws its own title row
             .navigationDestination(for: ExerciseTemplate.self) { ExerciseHowToView(exercise: $0) }
             .sheet(isPresented: $showingWorkouts) {
                 WorkoutsSheet(todayID: planned.id, scheduledID: scheduled.id, onPick: pickWorkout)
@@ -98,11 +118,17 @@ struct TodayView: View {
             .sheet(isPresented: $showingAdd) {
                 AddExerciseSheet(current: Set(workout.exercises.map(\.id)), onAdd: addExercise)
             }
-            .confirmationDialog("Remove \(pendingRemoval?.name ?? "exercise") from today?",
-                                isPresented: Binding(get: { pendingRemoval != nil },
-                                                     set: { if !$0 { pendingRemoval = nil } }),
-                                titleVisibility: .visible,
-                                presenting: pendingRemoval) { ex in
+    }
+
+    private var removingBinding: Binding<Bool> {
+        Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
+    }
+
+    private func withDialogs<V: View>(_ v: V) -> some View {
+        v.confirmationDialog("Remove \(pendingRemoval?.name ?? "exercise") from today?",
+                             isPresented: removingBinding,
+                             titleVisibility: .visible,
+                             presenting: pendingRemoval) { ex in
                 Button("Remove and delete today's sets", role: .destructive) { removeExercise(ex) }
             } message: { _ in
                 Text("The sets you've logged for it today will be deleted. Your plan won't change.")
@@ -112,22 +138,28 @@ struct TodayView: View {
             } message: {
                 Text("Removed exercises come back. Exercises you added, and any sets logged for them today, are removed.")
             }
-            .task(id: restEnd) {
-                guard let end = restEnd else { return }
-                try? await Task.sleep(for: .seconds(max(0, end.timeIntervalSinceNow)))
-                if !Task.isCancelled, restEnd == end {
-                    restEnd = nil
-                    restDoneCount += 1
-                }
-            }
+    }
+
+    private func withFeedback<V: View>(_ v: V) -> some View {
+        v.task(id: restEnd) { await finishRest() }
             .sensoryFeedback(.success, trigger: logCount)
             .sensoryFeedback(.impact(weight: .heavy), trigger: restDoneCount)
-            .onChange(of: workout.id) {
-                expandedID = nil
-                extraSets = [:]
-                if timerFinished { resetTimer() }   // finished one workout, now doing another
-            }
+            .onChange(of: workout.id) { workoutChanged() }
+    }
+
+    private func finishRest() async {
+        guard let end = restEnd else { return }
+        try? await Task.sleep(for: .seconds(max(0, end.timeIntervalSinceNow)))
+        if !Task.isCancelled, restEnd == end {
+            restEnd = nil
+            restDoneCount += 1
         }
+    }
+
+    private func workoutChanged() {
+        expandedID = nil
+        extraSets = [:]
+        if timerFinished { resetTimer() }   // finished one workout, now doing another
     }
 
     // MARK: - Supersets
