@@ -1110,6 +1110,10 @@ struct AddExerciseSheet: View {   // also used by the Plan tab's workout editor
                     .pickerStyle(.segmented)
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+                }
+                // Its own card, so it gets proper rounded corners (it shared one with the switch above).
+                Section {
                     Picker("Body part", selection: $bodyPart) {
                         Text("All").tag("all")
                         ForEach(ExerciseCatalog.bodyParts, id: \.self) { Text($0.capitalized).tag($0) }
