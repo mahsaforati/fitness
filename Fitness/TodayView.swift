@@ -192,11 +192,15 @@ struct TodayView: View {
     private func blockSection(_ b: Block, openID: String?) -> some View {
         let groupOpen = b.isSuperset && b.states.contains { $0.ex.id == openID }
         Section {
-            ForEach(b.states, id: \.ex.id) { s in
-                if s.ex.id == openID || groupOpen {
-                    expandedRows(s)
-                } else {
-                    collapsedRow(s)
+            if groupOpen {
+                supersetRows(b)   // one card: log both exercises of a round at once
+            } else {
+                ForEach(b.states, id: \.ex.id) { s in
+                    if s.ex.id == openID {
+                        expandedRows(s)
+                    } else {
+                        collapsedRow(s)
+                    }
                 }
             }
         } header: {
@@ -207,9 +211,186 @@ struct TodayView: View {
             }
         } footer: {
             if b.isSuperset {
-                Text("Do one set of each back to back, then rest.")
+                Text("Do one set of each back to back, log the round, then rest.")
             }
         }
+    }
+
+    // MARK: - Superset round card
+    // Rounds: round n = set n of each exercise. Finished rounds collapse to one line;
+    // the current round shows each exercise with − / + for weight and reps, and one "Log round".
+    // An exercise with fewer sets drops out of the later rounds. Rest starts after each round.
+
+    private func roundsTotal(_ b: Block) -> Int { b.states.map(\.count).max() ?? 0 }
+
+    private func completedRounds(_ b: Block) -> Int {
+        var r = 0
+        while r < roundsTotal(b) {
+            let n = r + 1
+            let complete = b.states.allSatisfy { $0.count < n || $0.logged[n] != nil }
+            if !complete { break }
+            r = n
+        }
+        return r
+    }
+
+    private func roundNumbers(upTo n: Int) -> [Int] { n > 0 ? Array(1...n) : [] }
+
+    @ViewBuilder
+    private func supersetRows(_ b: Block) -> some View {
+        let total: Int = roundsTotal(b)
+        let finished: Int = completedRounds(b)
+        let current: Int = finished + 1
+        supersetHeader(b, current: min(current, total), total: total)
+        restLine(for: b.states[0])
+        ForEach(roundNumbers(upTo: finished), id: \.self) { r in
+            doneRoundRow(b, r)
+        }
+        if current <= total {
+            let participants: [ExState] = b.states.filter { $0.count >= current }
+            ForEach(participants, id: \.ex.id) { st in
+                roundExerciseRow(st, current)
+            }
+            logRoundButton(b, round: current, participants: participants)
+        } else {
+            addRoundButton(b)
+        }
+    }
+
+    private func supersetHeader(_ b: Block, current: Int, total: Int) -> some View {
+        Button {
+            withAnimation { expandedID = ""; editing = nil }
+        } label: {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(b.states.map(\.ex.name).joined(separator: " + "))
+                        .font(.headline).foregroundStyle(Color.primary)
+                    Text("\(total) rounds · rest after each round")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("Round \(current) of \(total)")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .padding(.top, 4)
+        .padding(.bottom, isResting(b.states[0]) ? 0 : 4)
+        .listRowSeparator(isResting(b.states[0]) ? .hidden : .automatic, edges: .bottom)
+    }
+
+    // "Round 1        10 lb × 12 · BW × 8" — swipe left to remove the round.
+    private func doneRoundRow(_ b: Block, _ r: Int) -> some View {
+        let parts: [String] = b.states.compactMap { st in
+            st.logged[r].map { setText($0.weightKg, $0.reps) }
+        }
+        return HStack {
+            Text("Round \(r)").foregroundStyle(.secondary)
+            Spacer()
+            Text(parts.joined(separator: " · "))
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(Tone.ink)
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                withAnimation { removeRound(b, r) }
+            } label: {
+                Label("Remove", systemImage: "trash")
+            }
+        }
+    }
+
+    private func removeRound(_ b: Block, _ r: Int) {
+        for st in b.states where st.logged[r] != nil {
+            removeSet(st.ex, r)
+        }
+    }
+
+    private func isBodyweight(_ ex: ExerciseTemplate) -> Bool {
+        Self.startingKg(for: ex, units: units) == 0
+    }
+
+    private func roundKey(_ st: ExState, _ r: Int) -> String { "\(st.ex.id)#\(r)" }
+
+    private func roundValues(_ st: ExState, _ r: Int) -> (weight: Double, reps: Int) {
+        let sug = suggestion(st, r)
+        let d = drafts[roundKey(st, r)]
+        return (d?.weight ?? displayWeight(sug.kg), d?.reps ?? sug.reps)
+    }
+
+    // One exercise in the current round: name, then − / + for weight (BW for bodyweight) and reps.
+    private func roundExerciseRow(_ st: ExState, _ r: Int) -> some View {
+        let key: String = roundKey(st, r)
+        let v = roundValues(st, r)
+        return HStack(spacing: 4) {
+            Text(st.ex.name)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            roundWeight(st, key: key, weight: v.weight, reps: v.reps)
+            Text("×").foregroundStyle(.secondary)
+            repsControl(id: key, weight: v.weight, reps: v.reps)
+        }
+    }
+
+    @ViewBuilder
+    private func roundWeight(_ st: ExState, key: String, weight: Double, reps: Int) -> some View {
+        if isBodyweight(st.ex) && weight == 0 {
+            Text("BW").font(.body.weight(.semibold))
+        } else {
+            weightControl(id: key, weight: weight, reps: reps)
+        }
+    }
+
+    private func logRoundButton(_ b: Block, round r: Int, participants: [ExState]) -> some View {
+        Button {
+            logRound(b, round: r, participants: participants)
+        } label: {
+            Text("Log round")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Tone.ink)
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .background(Capsule().fill(Color(.systemGray5)))
+        }
+        .buttonStyle(.borderless)
+        .padding(.vertical, 2)
+    }
+
+    private func logRound(_ b: Block, round r: Int, participants: [ExState]) {
+        for st in participants {
+            let v = roundValues(st, r)
+            upsert(st.ex.id, r, kg: units.toKg(v.weight), reps: v.reps)
+            drafts[roundKey(st, r)] = nil
+        }
+        try? context.save()
+        logCount += 1
+        restTotal = Double(restSeconds)
+        restFor = b.states[0].ex.id
+        restEnd = .now.addingTimeInterval(TimeInterval(restSeconds))
+        if r >= roundsTotal(b), let last = b.states.last {
+            advance(from: last.ex)   // that was the last round: move on to the next exercise
+        }
+    }
+
+    // All planned rounds done: add one more round for every exercise in the superset.
+    private func addRoundButton(_ b: Block) -> some View {
+        Button {
+            withAnimation {
+                for st in b.states { extraSets[st.ex.id] = st.count + 1 - st.ex.sets }
+            }
+        } label: {
+            Label("Add round", systemImage: "plus")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Tone.ink)
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .background(Capsule().fill(Color(.systemGray5)))
+        }
+        .buttonStyle(.borderless)
+        .padding(.vertical, 2)
     }
 
     // MARK: - Rows
