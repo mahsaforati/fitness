@@ -620,14 +620,14 @@ struct TodayView: View {
 
     // Close the finished exercise and open the next one that isn't done
     // (another exercise in the same superset first, so the superset stays open until all of it is done).
-    // An exercise just got all its sets: keep it open for a second so it's clear it's finished,
+    // An exercise just got all its sets: keep it open for 0.65 s so it's clear it's finished,
     // then slowly close it and open the next one.
     private func advance(from ex: ExerciseTemplate) {
         editing = nil
         expandedID = ex.id
         justFinished = ex.id
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: .seconds(0.65))
             guard justFinished == ex.id else { return }   // something else happened meanwhile
             let partners = PlanTemplate.supersetGroup(of: ex, in: workout)
             let next = partners.first { $0.id != ex.id && !state(for: $0).done }
