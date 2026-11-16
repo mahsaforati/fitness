@@ -255,6 +255,7 @@ struct TodayView: View {
     @ViewBuilder
     private func expandedRows(_ s: ExState) -> some View {
         exerciseHeader(s)
+        restLine(for: s)   // always right under the exercise name, so it doesn't move as sets are added
         setsArea(s)
     }
 
@@ -300,7 +301,6 @@ struct TodayView: View {
         ForEach(loggedNumbers, id: \.self) { n in
             setRow(s, n)
         }
-        restLine(for: s)
         nextAction(s, next: (loggedNumbers.last ?? 0) + 1, firstSet: loggedNumbers.isEmpty)
     }
 
