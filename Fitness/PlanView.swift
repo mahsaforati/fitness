@@ -334,10 +334,11 @@ struct WorkoutTemplateEditor: View {
                 setStepButton("plus", i, by: 1)
                 Spacer(minLength: 12)
                 Text(ex.isTimed ? "Time" : "Reps").font(.subheadline).foregroundStyle(.secondary)
-                TextField("10–12", text: repsBinding(i))
-                    .multilineTextAlignment(.trailing)
-                    .font(.subheadline.weight(.semibold))
-                    .frame(width: 80)
+                repStepButton("minus", i, ex, up: false)
+                Text(ex.isTimed ? "\(ex.repCount) s" : "\(ex.repCount)")
+                    .font(.subheadline.weight(.semibold)).monospacedDigit()
+                    .frame(minWidth: ex.isTimed ? 40 : 24)
+                repStepButton("plus", i, ex, up: true)
             }
             // Our own divider to the next exercise, with the link pill in the middle of it.
             if !isLast { linkDivider(i).padding(.top, 6) }
@@ -378,6 +379,30 @@ struct WorkoutTemplateEditor: View {
     private func setsBinding(_ i: Int) -> Binding<Int> {
         Binding(get: { draftBinding.wrappedValue.exercises[safe: i]?.sets ?? 3 },
                 set: { v in if draftBinding.wrappedValue.exercises.indices.contains(i) { draftBinding.wrappedValue.exercises[i].sets = v } })
+    }
+
+    // Reps (or seconds) as a single number with − / +: 1 rep steps, or 5 s steps for timed holds.
+    // Anything after the number ("/ leg", "/ side") is kept; a range like 10–12 becomes 10.
+    private func repStepButton(_ icon: String, _ i: Int, _ ex: ExerciseTemplate, up: Bool) -> some View {
+        let step = ex.isTimed ? 5 : 1
+        let low = ex.isTimed ? 5 : 1
+        let atLimit = !up && ex.repCount <= low
+        return Button {
+            guard var d = draft, d.exercises.indices.contains(i) else { return }
+            let n = max(low, min(300, ex.repCount + (up ? step : -step)))
+            d.exercises[i].reps = ExerciseTemplate.reps(n, keepingSuffixOf: d.exercises[i].reps, timed: ex.isTimed)
+            draft = d
+        } label: {
+            Image(systemName: icon)
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(Color.primary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .buttonRepeatBehavior(.enabled)
+        .opacity(atLimit ? 0.3 : 1)
+        .accessibilityLabel(up ? (ex.isTimed ? "More time" : "More reps") : (ex.isTimed ? "Less time" : "Fewer reps"))
     }
 
     private func repsBinding(_ i: Int) -> Binding<String> {

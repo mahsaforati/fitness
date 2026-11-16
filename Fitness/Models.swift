@@ -93,3 +93,31 @@ extension WorkoutTemplate {
     // "Workout A · Lower body + core"
     var displayTitle: String { "\(name) · \(focus)" }
 }
+
+// MARK: - Reps as a single number
+// The plan's reps can be text like "10–12", "8 / leg", "30–40 s" or "RIR 2". The workout editor
+// uses one number: the first number in the text (or 10 if there isn't one).
+extension ExerciseTemplate {
+    var repCount: Int {
+        // Text that doesn't start with a number (e.g. "RIR 2") counts as 10 reps.
+        guard reps.first?.isNumber == true else { return isTimed ? 30 : 10 }
+        return Int(reps.prefix { $0.isNumber }) ?? (isTimed ? 30 : 10)
+    }
+
+    // "12" + what came after the number/range in the old text: "8–10 / leg" → "12 / leg".
+    // Timed exercises keep their seconds: "30–40 s / side" → "45 s / side".
+    static func reps(_ n: Int, keepingSuffixOf old: String, timed: Bool) -> String {
+        var rest = Substring(old)
+        if let first = rest.firstIndex(where: \.isNumber) {
+            rest = rest[first...].drop { $0.isNumber }                       // first number
+            if let dash = rest.first, dash == "–" || dash == "-" {           // "–12" of a range
+                rest = rest.dropFirst().drop { $0.isNumber }
+            }
+        } else {
+            rest = ""                                                        // e.g. "RIR 2"
+        }
+        var suffix = String(rest)
+        if timed && !suffix.hasPrefix(" s") { suffix = " s" + suffix }
+        return "\(n)" + suffix
+    }
+}
