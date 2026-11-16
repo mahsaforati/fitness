@@ -125,8 +125,8 @@ private enum Palette {
     static let background = Color(red: 0.961, green: 0.961, blue: 0.957) // #F5F5F4
     static let card       = Color.white
     static let pastDay    = Color(red: 0.980, green: 0.980, blue: 0.976) // #FAFAF9
-    static let done       = Color(red: 0.890, green: 0.910, blue: 0.878) // #E3E8E0 sage
-    static let today      = Color(red: 0.420, green: 0.520, blue: 0.400) // darker sage outline for today
+    static let done       = Color(red: 0.906, green: 0.898, blue: 0.894) // #E7E5E4 warm grey
+    static let today      = Color(red: 0.267, green: 0.251, blue: 0.235) // #44403C dark grey outline for today
     static let ink        = Color(red: 0.110, green: 0.098, blue: 0.090) // #1C1917
     static let muted      = Color(red: 0.557, green: 0.557, blue: 0.576) // #8E8E93
 }
@@ -165,7 +165,7 @@ private struct DayCell: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    // Done days are sage green (today included); today gets a sage outline, the selected day a grey one.
+    // Days with a workout are grey (today included); today gets a dark outline, the selected day a lighter one.
     private var fill: Color {
         if letter != nil { return Palette.done }
         return isPast ? Palette.pastDay : Palette.card
