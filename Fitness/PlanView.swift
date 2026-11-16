@@ -83,6 +83,7 @@ struct WorkoutTemplateEditor: View {
     @State private var editMode: EditMode = .inactive
     @State private var showingAdd = false
     @State private var openedEditor = false   // opened straight into edit mode once
+    @FocusState private var nameFocused: Bool
 
     private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
     private var saved: WorkoutTemplate? { workouts.first { $0.id == workoutID } }
@@ -105,11 +106,21 @@ struct WorkoutTemplateEditor: View {
             if isEditing {
                 // Big editable title, with the focus (worked out from the exercises) under it.
                 Section {
-                    // Big editable title. (The focus isn't shown while editing; it appears once saved.)
-                    TextField("Workout name", text: nameBinding)
-                        .font(.title2.bold())
-                        .listRowBackground(Color.clear)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                    // Big editable title with a small pencil after it; tap anywhere on it to type.
+                    HStack(spacing: 8) {
+                        TextField("Workout name", text: nameBinding)
+                            .font(.title2.bold())
+                            .fixedSize()
+                            .focused($nameFocused)
+                        Image(systemName: "pencil")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { nameFocused = true }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 4, trailing: 4))
                 }
             }
             exerciseSections
@@ -141,6 +152,7 @@ struct WorkoutTemplateEditor: View {
             Text("It's removed from your plan. Sets you've already logged are kept.")
         }
         .environment(\.editMode, $editMode)
+        .contentMargins(.top, 4, for: .scrollContent)   // name sits close under the ✕ / ✓ bar
         .navigationTitle("")   // no workout name in the middle of the top bar
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isEditing)
