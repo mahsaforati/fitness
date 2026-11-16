@@ -211,7 +211,14 @@ struct WorkoutTemplateEditor: View {
                     Text("Exercises")
                 }
             } footer: {
-                if !isEditing && g.id == all.last?.id { Text("Tap Edit to change this workout.") }
+                if isEditing && g.range.upperBound < list.count {
+                    // Link between this card and the next one, in the gap between them.
+                    linkControl(g.range.upperBound - 1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 4)
+                } else if !isEditing && g.id == all.last?.id {
+                    Text("Tap Edit to change this workout.")
+                }
             }
         }
     }
@@ -222,7 +229,9 @@ struct WorkoutTemplateEditor: View {
             // Rows are identified by exercise (not position), so a moved row keeps its identity
             // and the rows around it don't redraw.
             ForEach(g.range.map { IndexedExercise(index: $0, exercise: list[$0]) }) { item in
-                editRow(item.index, item.exercise, isLast: item.index == list.count - 1)
+                // The divider + link pill sits inside the card between exercises; the link between
+                // two cards goes in the gap below the card (see the footer).
+                editRow(item.index, item.exercise, isLast: item.index == g.range.upperBound - 1)
                     .contextMenu { moveMenu(item.index, count: list.count) }
             }
             .onMove { from, to in
@@ -284,7 +293,7 @@ struct WorkoutTemplateEditor: View {
         .padding(.top, 4)
         .padding(.bottom, isLast ? 4 : 0)
         .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: isLast ? 12 : 0, trailing: 20))
-        .listRowSeparator(isLast ? .automatic : .hidden, edges: .bottom)   // replaced by linkDivider
+        .listRowSeparator(.hidden)   // our own divider (with the link pill) replaces the system lines
     }
 
     // ———— + Link as superset ———— (or ———— Unlink ————)
