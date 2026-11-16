@@ -857,15 +857,20 @@ struct TodayView: View {
         }
     }
 
-    // Logging a set before tapping ▶ starts the workout (timer and progress bar) automatically.
-    // Only when it hasn't started yet today; a stopped or paused workout is left as it is.
+    // Logging a set does what ▶ does if the workout isn't running: starts the timer and shows the
+    // progress bar. Not started yet → starts from 0:00. Paused → carries on. Stopped earlier → a new
+    // timer from 0:00 (your logged sets are kept). Already running → nothing changes.
     private func autoStartWorkout() {
         let todayKey = PlanTemplate.dayKey(.now)
         if timerDay != todayKey {   // a timer left from another day starts fresh
             resetTimer()
             timerDay = todayKey
         }
-        guard !timerStarted, !timerFinished, timerStartedAt == 0, timerElapsed == 0 else { return }
+        guard timerStartedAt == 0 else { return }   // already running
+        if timerFinished {
+            timerElapsed = 0
+            timerFinished = false
+        }
         timerStartedAt = Date.now.timeIntervalSince1970
         withAnimation(.easeOut(duration: 0.25)) { timerStarted = true }
     }
