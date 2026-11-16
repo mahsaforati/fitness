@@ -25,10 +25,11 @@ struct CalendarView: View {
         let byDay = Dictionary(grouping: logs) { cal.startOfDay(for: $0.date) }
         let doneThisMonth = byDay.keys.filter { cal.isDate($0, equalTo: month, toGranularity: .month) }.count
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                header(done: doneThisMonth)
-                weekdayHeader.padding(.top, 16)
+        List {
+            Section { header(done: doneThisMonth) }.pageTitleRow()
+            Section {
+              VStack(alignment: .leading, spacing: 0) {
+                weekdayHeader
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 5), count: 7), spacing: 8) {
                     ForEach(Array(gridDays.enumerated()), id: \.offset) { _, day in
                         if let day {
@@ -48,37 +49,33 @@ struct CalendarView: View {
 
                 DayCard(day: selected, logs: byDay[selected] ?? [], units: units)
                     .padding(.top, 24)
+              }
+              .padding(.bottom, 24)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 24)
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
+        .scrollContentBackground(.hidden)
         .background(Palette.background.ignoresSafeArea())
     }
 
     // MARK: Header
 
+    // Same title style and place as Today (see PageTitle).
     private func header(done: Int) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(month.formatted(.dateTime.month(.wide).year()))
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundStyle(Palette.ink)
-                Text("\(done) session\(done == 1 ? "" : "s") done this month")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Palette.muted)
-            }
-            Spacer()
+        PageTitle(month.formatted(.dateTime.month(.wide).year()),
+                  subtitle: "\(done) session\(done == 1 ? "" : "s") done this month") {
             HStack(spacing: 18) {
                 Button { shiftMonth(-1) } label: { Image(systemName: "chevron.left") }
                     .accessibilityLabel("Previous month")
                 Button { shiftMonth(1) } label: { Image(systemName: "chevron.right") }
                     .accessibilityLabel("Next month")
             }
+            .buttonStyle(.borderless)
             .font(.system(size: 16, weight: .semibold))
             .foregroundStyle(Palette.ink)
         }
-        .padding(.top, 24)
     }
 
     private var weekdayHeader: some View {

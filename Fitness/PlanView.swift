@@ -21,6 +21,13 @@ struct PlanView: View {
         NavigationStack {
             Form {
                 Section {
+                    PageTitle("Your plan") {
+                        PageRoundButton("gearshape", label: "Settings") { showingSettings = true }
+                    }
+                }
+                .pageTitleRow()
+
+                Section {
                     ForEach(workouts) { w in
                         NavigationLink(value: w.id) {
                             VStack(alignment: .leading, spacing: 3) {
@@ -43,13 +50,8 @@ struct PlanView: View {
                     }
                 }
             }
-            .navigationTitle("Your plan")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingSettings = true } label: { Image(systemName: "gearshape") }
-                        .accessibilityLabel("Settings")
-                }
-            }
+            .navigationTitle("Your plan")                // used for the back button on pushed pages
+            .toolbar(.hidden, for: .navigationBar)       // the title row above is drawn like Today's
             .sheet(isPresented: $showingSettings) { SettingsView() }
             .navigationDestination(for: String.self) { value in
                 if value.hasPrefix("new:") {

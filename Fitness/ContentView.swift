@@ -14,6 +14,90 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Page title
+// The big title row used on Today, Calendar, Progress and Plan: same size, colour and place.
+// Put it in the first List section with .pageTitleRow() so it sits 12pt in from the card edges, like Today.
+
+private enum PageTone {
+    static let ink   = Color(red: 0.110, green: 0.098, blue: 0.090) // #1C1917
+    static let track = Color(red: 0.906, green: 0.898, blue: 0.894) // #E7E5E4
+    static let stone = Color(red: 0.267, green: 0.251, blue: 0.235) // #44403C
+}
+
+struct PageTitle<Trailing: View>: View {
+    let title: String
+    let subtitle: String?
+    let trailing: Trailing
+    @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32
+
+    init(_ title: String, subtitle: String? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title)
+                    .font(.system(size: titleSize, weight: .bold))
+                    .foregroundStyle(PageTone.ink)
+                    .lineLimit(1)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+            }
+            Spacer(minLength: 0)
+            trailing
+        }
+        .padding(.top, 8)
+    }
+}
+
+extension PageTitle where Trailing == EmptyView {
+    init(_ title: String, subtitle: String? = nil) {
+        self.init(title, subtitle: subtitle) { EmptyView() }
+    }
+}
+
+// Grey round icon button, like the dumbbell on Today.
+struct PageRoundButton: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+
+    init(_ icon: String, label: String, action: @escaping () -> Void) {
+        self.icon = icon
+        self.label = label
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(PageTone.stone)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(PageTone.track))
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(label)
+    }
+}
+
+extension View {
+    // Same row setup as Today's title: no card, no line, 12pt in from the card edges.
+    func pageTitleRow() -> some View {
+        self.listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+            .listRowSeparator(.hidden)
+    }
+}
+
 // MARK: - Progress tab
 // Built from your logged sets (no sample data):
 // - Weekly / Monthly switch (plain text choice, like the units in Settings)
@@ -37,26 +121,27 @@ struct ProgressTabView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            List {
+                Section { PageTitle("Progress") }.pageTitleRow()
                 if logs.isEmpty {
-                    ContentUnavailableView("No progress yet",
-                                           systemImage: "chart.bar",
-                                           description: Text("Log a few sets on Today and your progress shows up here."))
-                } else {
-                    List {
-                        Section { periodChoice }
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
-                        Section { chartCard }
-                        Section { statTiles }
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets())
-                        recentPRsSection
+                    Section {
+                        ContentUnavailableView("No progress yet",
+                                               systemImage: "chart.bar",
+                                               description: Text("Log a few sets on Today and your progress shows up here."))
                     }
-                    .listSectionSpacing(.compact)
+                    .listRowBackground(Color.clear)
+                } else {
+                    Section { periodChoice }
+                        .pageTitleRow()   // lines up with the title
+                    Section { chartCard }
+                    Section { statTiles }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    recentPRsSection
                 }
             }
             .navigationTitle("Progress")
+            .toolbar(.hidden, for: .navigationBar)
         }
     }
 
