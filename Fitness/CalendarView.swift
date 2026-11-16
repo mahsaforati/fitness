@@ -25,7 +25,9 @@ struct CalendarView: View {
         let byDay = Dictionary(grouping: logs) { cal.startOfDay(for: $0.date) }
         let doneThisMonth = byDay.keys.filter { cal.isDate($0, equalTo: month, toGranularity: .month) }.count
 
-        List {
+        // Built like Today (a List in a NavigationStack with the bar hidden) so the title sits in the same place.
+        NavigationStack {
+          List {
             Section { header(done: doneThisMonth) }.pageTitleRow()
             Section {
               VStack(alignment: .leading, spacing: 0) {
@@ -56,8 +58,10 @@ struct CalendarView: View {
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
         }
-        .scrollContentBackground(.hidden)
-        .background(Palette.background.ignoresSafeArea())
+          }
+          .environment(\.defaultMinListRowHeight, 0)
+          .toolbar(.hidden, for: .navigationBar)
+        }
     }
 
     // MARK: Header
