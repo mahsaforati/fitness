@@ -104,14 +104,30 @@ struct WorkoutTemplateEditor: View {
             if isEditing {
                 // Big editable title, with the focus (worked out from the exercises) under it.
                 Section {
-                    VStack(alignment: .leading, spacing: 4) {
-                        TextField("Workout name", text: nameBinding)
-                            .font(.title2.bold())
-                        Text("\(draftBinding.wrappedValue.focus) · set automatically")
-                            .font(.footnote).foregroundStyle(.secondary)
+                    // Clearly editable: a white field with an outline and a pencil, labelled "Name".
+                    // (The focus isn't shown while editing; it appears once the workout is saved.)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Name").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            TextField("Workout name", text: nameBinding)
+                                .font(.title3.bold())
+                            Image(systemName: "pencil")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 48)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color(.secondarySystemGroupedBackground))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .strokeBorder(Color(.separator), lineWidth: 1)
+                        )
                     }
                     .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
                 }
             } else if let w = saved {
                 Section {
