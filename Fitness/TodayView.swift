@@ -268,7 +268,7 @@ struct TodayView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                         .frame(width: 14, alignment: .leading)
                     Text(st.ex.name)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.headline)   // a bit larger when the superset is open
                         .foregroundStyle(Color.primary)
                     Spacer()
                     howButton(st)
@@ -451,7 +451,7 @@ struct TodayView: View {
                 withAnimation { expandedID = ""; editing = nil }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
+                    Text(s.ex.name).font(.title3.weight(.semibold)).foregroundStyle(Color.primary)   // a bit larger when open
                     Text(planLine(s)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
