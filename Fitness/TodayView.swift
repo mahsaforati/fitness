@@ -20,6 +20,8 @@ struct TodayView: View {
     @State private var extraSets: [String: Int] = [:]  // sets added (+) or removed (−) vs the plan, for today
     @State private var editing: SetEdit?
     @State private var restEnd: Date?
+    @State private var restTotal: Double = 80   // seconds this rest started with (+10s adds to it), for the line
+    @State private var restFor: String?         // the exercise the rest line shows under
     @State private var logCount = 0
     @State private var restDoneCount = 0
     @State private var showingAdd = false
@@ -109,13 +111,6 @@ struct TodayView: View {
                 Button("Reset", role: .destructive) { resetEdits() }
             } message: {
                 Text("Removed exercises come back. Exercises you added, and any sets logged for them today, are removed.")
-            }
-            .safeAreaInset(edge: .bottom) {
-                if let end = restEnd {
-                    RestBar(end: end,
-                            add: { restEnd = end.addingTimeInterval(10) },
-                            skip: { restEnd = nil })
-                }
             }
             .task(id: restEnd) {
                 guard let end = restEnd else { return }
@@ -276,6 +271,12 @@ struct TodayView: View {
         let next = (loggedNumbers.last ?? 0) + 1
         ForEach(loggedNumbers, id: \.self) { n in
             setRow(s, n)
+        }
+        if let end = restEnd, restFor == s.ex.id {
+            RestLine(end: end, total: restTotal,
+                     add: { restEnd = end.addingTimeInterval(10); restTotal += 10 },
+                     skip: { withAnimation { restEnd = nil } })
+                .transition(.opacity)
         }
         if let e = editing, e.exercise.id == s.ex.id, e.setNumber == next {
             setRow(s, next)   // editing a new set (from Add, or changing the first set before logging it)
@@ -508,6 +509,8 @@ struct TodayView: View {
         guard startRest else { return }
         // In a superset, rest only once every exercise in it has done this round's set.
         if roundComplete(ex, n) {
+            restTotal = Double(restSeconds)
+            restFor = ex.id
             restEnd = .now.addingTimeInterval(TimeInterval(restSeconds))
         } else {
             restEnd = nil
@@ -647,6 +650,7 @@ struct TodayView: View {
             withAnimation(.easeInOut(duration: 0.7)) {
                 expandedID = next?.id ?? ""
                 justFinished = nil
+                if restEnd != nil, let next { restFor = next.id }   // keep resting under the exercise that's open now
             }
         }
     }
@@ -1079,136 +1083,41 @@ private struct WorkoutHeader: View {
 
 // MARK: - Rest timer bar
 
-private struct RestBar: View {
+// A thin countdown line inside the open exercise, under the set you just logged:
+// "Rest ━━━━━━── 0:52  +10s  Skip". The line empties as the rest runs down.
+private struct RestLine: View {
     let end: Date
+    let total: Double
     let add: () -> Void
     let skip: () -> Void
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            let left = max(0, Int(end.timeIntervalSince(ctx.date).rounded(.up)))
-            HStack(spacing: 12) {
-                Image(systemName: "timer")
-                Text("Rest \(left / 60):\(String(format: "%02d", left % 60))")
-                    .font(.headline).monospacedDigit()
-                Spacer()
-                Button("+10s", action: add).buttonStyle(.bordered)
-                Button("Skip", action: skip).buttonStyle(.bordered)
-            }
-            .tint(.primary)
-            .padding(.horizontal, 16).padding(.vertical, 10)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-        }
-    }
-}
-
-// MARK: - Your workouts (browse A, B, C with a preview; swap today's workout)
-
-private struct WorkoutsSheet: View {
-    let todayID: String
-    let scheduledID: String
-    let onPick: (String) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List {
-                ForEach(PlanTemplate.phase1) { w in
-                    Section {
-                        NavigationLink(value: w.id) { card(w) }
+        TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
+            let left = max(0, end.timeIntervalSince(ctx.date))
+            let secs = Int(left.rounded(.up))
+            HStack(spacing: 10) {
+                Text("Rest").font(.subheadline).foregroundStyle(.secondary)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color(.systemGray5))
+                        Capsule().fill(Color(.systemGray2))
+                            .frame(width: geo.size.width * CGFloat(total > 0 ? left / total : 0))
+                            .animation(.linear(duration: 0.25), value: left)
                     }
                 }
-            }
-            .navigationTitle("Your workouts")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: String.self) { id in
-                if let w = PlanTemplate.workout(id: id) {
-                    WorkoutPreview(workout: w, isToday: w.id == todayID, isScheduled: w.id == scheduledID) {
-                        onPick(w.id)
-                        dismiss()
-                    }
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
-            }
-        }
-    }
-
-    // Title, a badge for today / scheduled, then a short preview of the exercises.
-    private func card(_ w: WorkoutTemplate) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(w.title).font(.headline)
-                Spacer()
-                if w.id == todayID { badge("Today") }
-                else if w.id == scheduledID { badge("Scheduled") }
-            }
-            Text("\(w.exercises.count) exercises · \(w.exercises.reduce(0) { $0 + $1.sets }) sets")
-                .font(.caption).foregroundStyle(.secondary)
-            Text(w.exercises.map(\.name).joined(separator: " · "))
-                .font(.footnote).foregroundStyle(.secondary)
-                .lineLimit(2)
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func badge(_ text: String) -> some View {
-        Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(Tone.check)
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(Capsule().fill(Tone.done))
-    }
-}
-
-private struct WorkoutPreview: View {
-    let workout: WorkoutTemplate
-    let isToday: Bool
-    let isScheduled: Bool
-    let onPick: () -> Void
-
-    var body: some View {
-        List {
-            Section {
-                ForEach(workout.exercises) { ex in
-                    NavigationLink {
-                        ExerciseHowToView(exercise: ex)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(ex.name).font(.subheadline.weight(.semibold))
-                            Text("\(ex.sets) × \(ex.reps)" + (ex.superset != nil ? " · superset" : ""))
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            } footer: {
-                Text("Tap an exercise to see how to do it.")
-            }
-        }
-        .navigationTitle(workout.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .bottom) {
-            if isToday {
-                Label("This is today's workout", systemImage: "checkmark.circle.fill")
+                .frame(height: 4)
+                Text("\(secs / 60):\(String(format: "%02d", secs % 60))")
+                    .font(.subheadline.weight(.semibold)).monospacedDigit()
+                Button("+10s", action: add)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Tone.check)
-                    .frame(maxWidth: .infinity, minHeight: 48)
-                    .background(Capsule().fill(Tone.done))
-                    .padding(.horizontal).padding(.bottom, 8)
-            } else {
-                Button(action: onPick) {
-                    Text(isScheduled ? "Go back to the scheduled workout" : "Do this workout today")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                        .background(Capsule().fill(Color(red: 0.478, green: 0.545, blue: 0.455)))
-                }
-                .buttonStyle(.borderless)
-                .padding(.horizontal).padding(.bottom, 8)
+                    .foregroundStyle(Color.primary)
+                    .buttonStyle(.borderless)
+                Button("Skip", action: skip)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.primary)
+                    .buttonStyle(.borderless)
             }
+            .padding(.vertical, 2)
         }
     }
 }
