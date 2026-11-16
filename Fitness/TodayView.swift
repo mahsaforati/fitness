@@ -4,7 +4,7 @@ import SwiftData
 // Today: log every set right on this screen.
 // - The exercise you're on opens up with a row per set (swipe left to remove one); finished exercises close with a ✓ and the next one opens.
 // - Tap a set row to log it with last session's numbers; tap a logged row to change it right there (− / +).
-// - "Same as last time" logs all remaining sets in one tap; "+ Add set" adds an extra set.
+// - Start with one pre-filled set and a Log button; then Repeat logs the same numbers again and Add opens a new set to change.
 // - Everything saves as soon as you log it (one record per set per day), and a rest timer starts.
 struct TodayView: View {
     @AppStorage("units") private var unitsRaw = UnitSystem.imperial.rawValue
@@ -231,7 +231,7 @@ struct TodayView: View {
         .tint(.red)
     }
 
-    // The open exercise: a header row, one row per set, then a row with "+ Add set" / "Same as last time".
+    // The open exercise: a header row, the logged sets, then Log (first set) or Repeat / Add.
     @ViewBuilder
     private func expandedRows(_ s: ExState, badge: Int? = nil) -> some View {
         HStack(alignment: .top) {
@@ -265,36 +265,88 @@ struct TodayView: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
 
-        // One set at a time: the sets you've logged, plus the next one to do.
-        // Logging it brings up the next, until the planned number is done.
-        ForEach(0..<s.visibleCount, id: \.self) { i in
-            setRow(s, i + 1)
+        // Before the first set: one pre-filled set with a Log button.
+        // After that: the sets you've logged, then Repeat (same numbers again) and Add (a new set to change).
+        let loggedNumbers = s.logged.keys.sorted()
+        let next = (loggedNumbers.last ?? 0) + 1
+        ForEach(loggedNumbers, id: \.self) { n in
+            setRow(s, n)
         }
+        if let e = editing, e.exercise.id == s.ex.id, e.setNumber == next {
+            setRow(s, next)   // editing a new set (from Add, or changing the first set before logging it)
+        } else if loggedNumbers.isEmpty {
+            firstSetRow(s)
+        } else {
+            repeatAddRow(s, next)
+        }
+    }
 
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Button {
-                    withAnimation { extraSets[s.ex.id] = s.count + 1 - s.ex.sets }
-                } label: {
-                    Label("Add set", systemImage: "plus").font(.subheadline).foregroundStyle(Color.primary)
-                }
-                .buttonStyle(.borderless)
-                Spacer()
-                if !s.last.isEmpty && !s.done {
-                    Button { sameAsLastTime(s) } label: {
-                        Text("Same as last time ✓")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(Color.primary)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(Capsule().fill(Color(.systemGray5)))
-                    }
-                    .buttonStyle(.borderless)
-                }
+    // "Set 1 · 45 lb × 12" pre-filled from last time, with a light grey Log button.
+    // Tap the numbers to change them before logging.
+    private func firstSetRow(_ s: ExState) -> some View {
+        let sug = suggestion(s, 1)
+        let openEditor = {
+            withAnimation {
+                editing = SetEdit(exercise: s.ex, setNumber: 1, weight: displayWeight(sug.kg),
+                                  reps: sug.reps, isLogged: false)
             }
-            Text("Tap a set to log it · tap a logged set to change it · swipe left to remove")
-                .font(.caption).foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 4)
+        return HStack(spacing: 10) {
+            Button(action: openEditor) {
+                HStack {
+                    Text("Set 1").foregroundStyle(.secondary)
+                    Spacer()
+                    Text(sug.known ? setText(sug.kg, sug.reps) : "Tap to enter")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            Button {
+                if sug.known { logSet(s.ex, 1, kg: sug.kg, reps: sug.reps) } else { openEditor() }
+            } label: {
+                Text("Log")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Tone.ink)
+                    .padding(.horizontal, 16).padding(.vertical, 7)
+                    .background(Capsule().fill(Color(.systemGray5)))
+            }
+            .buttonStyle(.borderless)
+        }
+    }
+
+    // Repeat logs another set with the numbers of the last one; Add opens a new set to change first.
+    private func repeatAddRow(_ s: ExState, _ next: Int) -> some View {
+        let last = s.logged[next - 1]
+        return HStack(spacing: 10) {
+            Button {
+                if let last { logSet(s.ex, next, kg: last.weightKg, reps: last.reps) }
+            } label: {
+                Label("Repeat", systemImage: "repeat")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Tone.ink)
+                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .background(Capsule().fill(Color(.systemGray5)))
+            }
+            .buttonStyle(.borderless)
+            Button {
+                withAnimation {
+                    editing = SetEdit(exercise: s.ex, setNumber: next,
+                                      weight: displayWeight(last?.weightKg ?? 0),
+                                      reps: last?.reps ?? 10, isLogged: false)
+                }
+            } label: {
+                Label("Add", systemImage: "plus")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Tone.ink)
+                    .frame(maxWidth: .infinity, minHeight: 34)
+                    .background(Capsule().fill(Color(.systemGray5)))
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.vertical, 2)
     }
 
     // A set row, or the inline − / + editor when that set is being edited.
@@ -303,7 +355,7 @@ struct TodayView: View {
         if let e = editing, e.exercise.id == s.ex.id, e.setNumber == n {
             InlineSetEditor(edit: e, units: units,
                             onSave: { edit in withAnimation { editing = nil }; saveEdit(edit) },
-                            onRemove: { withAnimation { editing = nil; removeSet(s.ex, n) } },
+                            onRemove: { withAnimation { editing = nil; if e.isLogged { removeSet(s.ex, n) } } },
                             onCancel: { withAnimation { editing = nil } })
                 .id(e.id)
                 .listRowBackground(Color(.secondarySystemGroupedBackground))
@@ -333,7 +385,7 @@ struct TodayView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                Text("Set \(n) of \(s.count)")
+                Text("Set \(n)")
                     .foregroundStyle(log != nil ? Tone.ink : Color.secondary)
                 Spacer()
                 Text(value)
@@ -371,11 +423,7 @@ struct TodayView: View {
         let last: [Int: SetLog]     // previous session's sets by set number
         let count: Int              // set rows shown today (plan ± added/removed sets)
         var done: Bool { (0..<count).allSatisfy { logged[$0 + 1] != nil } }
-        // Rows shown: every set up to and including the first one not logged yet.
-        var visibleCount: Int {
-            let next = (1...max(count, 1)).first { logged[$0] == nil } ?? count
-            return min(count, next)
-        }
+
     }
 
     private func state(for ex: ExerciseTemplate) -> ExState {
@@ -439,17 +487,6 @@ struct TodayView: View {
         if !before.done && nowDone { advance(from: ex) }
     }
 
-    private func sameAsLastTime(_ s: ExState) {
-        for i in 0..<s.count where s.logged[i + 1] == nil {
-            let n = i + 1
-            let v = suggestion(s, n)
-            upsert(s.ex.id, n, kg: v.kg, reps: v.reps)
-        }
-        try? context.save()
-        logCount += 1
-        advance(from: s.ex)
-    }
-
     private func saveEdit(_ e: SetEdit) {
         logSet(e.exercise, e.setNumber, kg: units.toKg(e.weight), reps: e.reps, startRest: !e.isLogged)
     }
@@ -459,7 +496,7 @@ struct TodayView: View {
         let s = state(for: ex)
         if let log = s.logged[n] { context.delete(log) }
         for (k, log) in s.logged where k > n { log.setNumber = k - 1 }
-        extraSets[ex.id] = s.count - 1 - ex.sets
+        extraSets[ex.id] = max(0, s.count - 1 - ex.sets)   // the plan's target stays; only extra sets go
         try? context.save()
     }
 
