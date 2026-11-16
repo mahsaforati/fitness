@@ -194,12 +194,10 @@ struct TodayView: View {
         Section {
             if groupOpen {
                 supersetRows(b)   // one card: log both exercises of a round at once
-                    .listRowBackground(OpenStripe())
             } else {
                 ForEach(b.states, id: \.ex.id) { s in
                     if s.ex.id == openID {
                         expandedRows(s)
-                            .listRowBackground(OpenStripe())   // thin dark stripe down the open exercise
                     } else {
                         collapsedRow(s)
                     }
@@ -453,7 +451,7 @@ struct TodayView: View {
                 withAnimation { expandedID = ""; editing = nil }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(s.ex.name).font(.title3.weight(.semibold)).foregroundStyle(Color.primary)
+                    Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
                     Text(planLine(s)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -655,7 +653,7 @@ struct TodayView: View {
                             onRemove: { withAnimation { editing = nil; if e.isLogged { removeSet(s.ex, n) } } },
                             onCancel: { withAnimation { editing = nil } })
                 .id(e.id)
-                .listRowBackground(OpenStripe())
+                .listRowBackground(Color(.secondarySystemGroupedBackground))
         } else {
             setButtonRow(s, n)
         }
@@ -694,7 +692,7 @@ struct TodayView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .listRowBackground(OpenStripe())   // logged sets show in bold; the stripe marks the open exercise
+        .listRowBackground(Color(.secondarySystemGroupedBackground))   // logged sets show in bold; no tint
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 withAnimation { removeSet(s.ex, n) }
@@ -1639,16 +1637,4 @@ struct ExerciseHowToView: View {
 // They have no weight; the number logged is seconds.
 extension ExerciseTemplate {
     var isTimed: Bool { reps.hasSuffix(" s") || reps.contains(" s /") }
-}
-
-// Row background for the open exercise: the usual white, with a thin dark stripe down the left edge.
-private struct OpenStripe: View {
-    var body: some View {
-        ZStack(alignment: .leading) {
-            Color(.secondarySystemGroupedBackground)
-            Rectangle()
-                .fill(Color(red: 0.341, green: 0.325, blue: 0.306))   // #57534E
-                .frame(width: 3)
-        }
-    }
 }
