@@ -157,12 +157,11 @@ struct TodayView: View {
     private func blockSection(_ b: Block, openID: String?) -> some View {
         let groupOpen = b.isSuperset && b.states.contains { $0.ex.id == openID }
         Section {
-            ForEach(Array(b.states.enumerated()), id: \.element.ex.id) { i, s in
-                let badge: Int? = b.isSuperset ? i + 1 : nil
+            ForEach(b.states, id: \.ex.id) { s in
                 if s.ex.id == openID || groupOpen {
-                    expandedRows(s, badge: badge)
+                    expandedRows(s)
                 } else {
-                    collapsedRow(s, badge: badge)
+                    collapsedRow(s)
                 }
             }
         } header: {
@@ -178,28 +177,15 @@ struct TodayView: View {
         }
     }
 
-    // Small numbered circle showing an exercise's place in its superset (1, 2…).
-    @ViewBuilder
-    private func supersetBadge(_ n: Int?) -> some View {
-        if let n {
-            Text("\(n)")
-                .font(.caption2.bold())
-                .foregroundStyle(.white)
-                .frame(width: 18, height: 18)
-                .background(Circle().fill(Tone.ink))
-        }
-    }
-
     // MARK: - Rows
 
-    private func collapsedRow(_ s: ExState, badge: Int? = nil) -> some View {
+    private func collapsedRow(_ s: ExState) -> some View {
         Button {
             withAnimation { expandedID = s.ex.id; editing = nil }
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        supersetBadge(badge)
                         Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
                     }
                     Text(collapsedSubtitle(s)).font(.subheadline).foregroundStyle(.secondary)
@@ -233,14 +219,13 @@ struct TodayView: View {
 
     // The open exercise: a header row, the logged sets, then Log (first set) or Repeat / Add.
     @ViewBuilder
-    private func expandedRows(_ s: ExState, badge: Int? = nil) -> some View {
+    private func expandedRows(_ s: ExState) -> some View {
         HStack(alignment: .top) {
             Button {
                 withAnimation { expandedID = ""; editing = nil }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
-                        supersetBadge(badge)
                         Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
                     }
                     Text(planLine(s)).font(.subheadline).foregroundStyle(.secondary)
