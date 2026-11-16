@@ -173,7 +173,7 @@ struct WorkoutTemplateEditor: View {
             ForEach(Array(list.enumerated()), id: \.element.id) { i, ex in
                 editRow(i, ex, isLast: i == list.count - 1)
             }
-            .onMove { from, to in draftBinding.wrappedValue.exercises.move(fromOffsets: from, toOffset: to) }
+            .onMove(perform: moveExercises)
         } else {
             ForEach(saved?.exercises ?? []) { ex in
                 exerciseRow(ex)
@@ -245,6 +245,16 @@ struct WorkoutTemplateEditor: View {
                 Spacer()
             }
         }
+    }
+
+    // iOS has already moved the row on screen when you let go, so apply the new order straight
+    // away with no extra SwiftUI animation (that second animation made the row "settle" late).
+    private func moveExercises(from: IndexSet, to: Int) {
+        guard var d = draft else { return }
+        d.exercises.move(fromOffsets: from, toOffset: to)
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { draft = d }
     }
 
     // Put exercises a and b (next to each other) in the same superset.
