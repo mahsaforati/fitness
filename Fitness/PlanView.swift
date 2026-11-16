@@ -277,15 +277,20 @@ struct WorkoutTemplateEditor: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Remove \(ex.name)")
             }
-            PlainStepper(title: "Sets", value: setsBinding(i), range: 1...10, step: 1) { "\($0)" }
-                .font(.subheadline)
-            HStack {
-                Text(ex.isTimed ? "Time" : "Reps").font(.subheadline)
-                Spacer()
+            // Sets and reps on one line: "Sets − 3 +      Reps 10–12"
+            HStack(spacing: 4) {
+                Text("Sets").font(.subheadline).foregroundStyle(.secondary)
+                setStepButton("minus", i, by: -1)
+                Text("\(ex.sets)")
+                    .font(.subheadline.weight(.semibold)).monospacedDigit()
+                    .frame(minWidth: 18)
+                setStepButton("plus", i, by: 1)
+                Spacer(minLength: 12)
+                Text(ex.isTimed ? "Time" : "Reps").font(.subheadline).foregroundStyle(.secondary)
                 TextField("10–12", text: repsBinding(i))
                     .multilineTextAlignment(.trailing)
                     .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: 140)
+                    .frame(width: 80)
             }
             // Our own divider to the next exercise, with the link pill in the middle of it.
             if !isLast { linkDivider(i).padding(.top, 6) }
@@ -304,6 +309,23 @@ struct WorkoutTemplateEditor: View {
             Rectangle().fill(Color(.separator)).frame(height: 0.5)
         }
         .frame(height: 24)
+    }
+
+    private func setStepButton(_ icon: String, _ i: Int, by delta: Int) -> some View {
+        let sets = draft?.exercises[safe: i]?.sets ?? 3
+        let atLimit = delta < 0 ? sets <= 1 : sets >= 10
+        return Button {
+            setsBinding(i).wrappedValue = min(10, max(1, sets + delta))
+        } label: {
+            Image(systemName: icon)
+                .font(.footnote.weight(.bold))
+                .foregroundStyle(Color.primary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .opacity(atLimit ? 0.3 : 1)
+        .accessibilityLabel(delta < 0 ? "Fewer sets" : "More sets")
     }
 
     private func setsBinding(_ i: Int) -> Binding<Int> {
