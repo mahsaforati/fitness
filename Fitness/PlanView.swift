@@ -184,30 +184,30 @@ struct WorkoutTemplateEditor: View {
     // One exercise while editing: name and remove, then sets (− / +) and reps, then the
     // superset link to the next exercise. Drag the ≡ handle to reorder.
     private func editRow(_ i: Int, _ ex: ExerciseTemplate, isLast: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        HStack(alignment: .center, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(ex.name).font(.subheadline.weight(.semibold))
-                Spacer()
-                Button {
-                    withAnimation { _ = draftBinding.wrappedValue.exercises.remove(at: i) }
-                } label: {
-                    Image(systemName: "trash").font(.footnote).foregroundStyle(.secondary)
-                        .frame(width: 30, height: 30).contentShape(Rectangle())
+                PlainStepper(title: "Sets", value: setsBinding(i), range: 1...10, step: 1) { "\($0)" }
+                    .font(.subheadline)
+                HStack {
+                    Text(ex.isTimed ? "Time" : "Reps").font(.subheadline)
+                    Spacer()
+                    TextField("10–12", text: repsBinding(i))
+                        .multilineTextAlignment(.trailing)
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: 140)
                 }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Remove \(ex.name)")
+                if !isLast { linkControl(i) }
             }
-            PlainStepper(title: "Sets", value: setsBinding(i), range: 1...10, step: 1) { "\($0)" }
-                .font(.subheadline)
-            HStack {
-                Text(ex.isTimed ? "Time" : "Reps").font(.subheadline)
-                Spacer()
-                TextField("10–12", text: repsBinding(i))
-                    .multilineTextAlignment(.trailing)
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: 140)
+            // 🗑 on the right, centred, right next to the iOS reorder handle (≡).
+            Button {
+                withAnimation { _ = draftBinding.wrappedValue.exercises.remove(at: i) }
+            } label: {
+                Image(systemName: "trash").font(.footnote).foregroundStyle(.secondary)
+                    .frame(width: 30, height: 30).contentShape(Rectangle())
             }
-            if !isLast { linkControl(i) }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Remove \(ex.name)")
         }
         .padding(.vertical, 4)
     }
