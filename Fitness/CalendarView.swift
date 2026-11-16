@@ -57,7 +57,6 @@ struct CalendarView: View {
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
-        }
           }
           .environment(\.defaultMinListRowHeight, 0)
           .toolbar(.hidden, for: .navigationBar)
