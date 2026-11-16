@@ -75,6 +75,19 @@ struct TodayView: View {
 
     private func openWorkouts() { showingWorkouts = true }
 
+    // Plan workouts where every exercise has all its planned sets logged today.
+    private var workoutsDoneToday: Set<String> {
+        let start = dayStart
+        var setsToday: [String: Set<Int>] = [:]
+        for log in allLogs where log.date >= start {
+            setsToday[log.exerciseID, default: []].insert(log.setNumber)
+        }
+        let done = PlanTemplate.phase1.filter { w in
+            w.exercises.allSatisfy { ex in (setsToday[ex.id]?.count ?? 0) >= ex.sets }
+        }
+        return Set(done.map(\.id))
+    }
+
     private func headerSection(done: Int, total: Int) -> some View {
         let header = WorkoutHeader(title: workout.title, done: done, total: total,
                                    showWorkouts: openWorkouts, startOver: clearTodaysSets)
@@ -116,7 +129,8 @@ struct TodayView: View {
             .toolbar(.hidden, for: .navigationBar)   // Today draws its own title row
             .navigationDestination(for: ExerciseTemplate.self) { ExerciseHowToView(exercise: $0) }
             .sheet(isPresented: $showingWorkouts) {
-                WorkoutsSheet(todayID: planned.id, scheduledID: scheduled.id, onPick: pickWorkout)
+                WorkoutsSheet(todayID: planned.id, scheduledID: scheduled.id,
+                              doneToday: workoutsDoneToday, onPick: pickWorkout)
             }
             .sheet(isPresented: $showingAdd) {
                 AddExerciseSheet(current: Set(workout.exercises.map(\.id)), onAdd: addExercise)
@@ -405,9 +419,8 @@ struct TodayView: View {
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
-                    }
+                    Text(s.ex.name).font(.headline)
+                        .foregroundStyle(s.done ? Tone.doneText : Color.primary)
                     Text(collapsedSubtitle(s)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -421,6 +434,8 @@ struct TodayView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
+        // Finished exercises get a very pale sage card; sets inside stay plain.
+        .listRowBackground(s.done ? Tone.doneCard : Color(.secondarySystemGroupedBackground))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
     }
@@ -956,6 +971,8 @@ struct TodayView: View {
 private enum Tone {
     static let done  = Color(red: 0.890, green: 0.910, blue: 0.878) // #E3E8E0 sage
     static let check = Color(red: 0.420, green: 0.520, blue: 0.400) // darker sage for ✓
+    static let doneCard = Color(red: 0.933, green: 0.945, blue: 0.925) // #EEF1EC very pale sage: finished exercise / workout
+    static let doneText = Color(red: 0.373, green: 0.447, blue: 0.349) // #5F7259 sage text on doneCard
     static let ink   = Color(red: 0.110, green: 0.098, blue: 0.090) // #1C1917
 }
 
@@ -1488,6 +1505,7 @@ private struct RestLine: View {
 private struct WorkoutsSheet: View {
     let todayID: String
     let scheduledID: String
+    let doneToday: Set<String>   // finished today: pale sage with a ✓
     let onPick: (String) -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -1497,6 +1515,8 @@ private struct WorkoutsSheet: View {
                 ForEach(PlanTemplate.phase1) { w in
                     Section {
                         NavigationLink(value: w.id) { card(w) }
+                            .listRowBackground(doneToday.contains(w.id) ? Tone.doneCard
+                                               : Color(.secondarySystemGroupedBackground))
                     }
                 }
             }
@@ -1516,10 +1536,20 @@ private struct WorkoutsSheet: View {
         }
     }
 
-    // Title, then a short preview of the exercises.
+    // Title (with a sage ✓ if finished today), then a short preview of the exercises.
     private func card(_ w: WorkoutTemplate) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(w.title).font(.headline)
+        let done = doneToday.contains(w.id)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(w.title).font(.headline)
+                    .foregroundStyle(done ? Tone.doneText : Color.primary)
+                Spacer()
+                if done {
+                    Image(systemName: "checkmark").font(.subheadline.bold())
+                        .foregroundStyle(Tone.check)
+                        .accessibilityLabel("Done today")
+                }
+            }
             Text("\(w.exercises.count) exercises · \(w.exercises.reduce(0) { $0 + $1.sets }) sets")
                 .font(.caption).foregroundStyle(.secondary)
             Text(w.exercises.map(\.name).joined(separator: " · "))
