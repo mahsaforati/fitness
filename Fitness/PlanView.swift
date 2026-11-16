@@ -5,6 +5,7 @@ struct PlanView: View {
     @AppStorage(PlanTemplate.templatesKey) private var templatesRaw = ""
     @State private var confirmingReset = false
     @State private var showingSettings = false
+    @State private var path: [String] = []
 
     private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
 
@@ -18,7 +19,7 @@ struct PlanView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Form {
                 Section {
                     ForEach(workouts) { w in
@@ -30,11 +31,27 @@ struct PlanView: View {
                             }
                         }
                     }
-                    NavigationLink(value: "new:" + nextWorkoutID) {
-                        Label("New workout", systemImage: "plus")
-                    }
                 } header: {
                     Text("Workouts")
+                }
+
+                // Its own light dashed box under the list, so it's clearly not one of your workouts.
+                Section {
+                    Button { path.append("new:" + nextWorkoutID) } label: {
+                        Text("New workout")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color(red: 0.267, green: 0.251, blue: 0.235))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(Color(red: 0.659, green: 0.635, blue: 0.620),
+                                                  style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+                            )
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.borderless)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets())
                 }
 
                 if !templatesRaw.isEmpty {
