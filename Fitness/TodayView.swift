@@ -55,7 +55,8 @@ struct TodayView: View {
             List {
                 Section {
                     WorkoutHeader(title: workout.title, done: doneCount, total: states.count,
-                                  showWorkouts: { showingWorkouts = true })
+                                  showWorkouts: { showingWorkouts = true },
+                                  startOver: clearTodaysSets)
                         .listRowBackground(Color.clear)
                         // Its own alignment, separate from the exercises: 12pt in from the card edges on both sides.
                         .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
@@ -397,7 +398,7 @@ struct TodayView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .listRowBackground(log != nil ? Tone.done : Color(.secondarySystemGroupedBackground))
+        .listRowBackground(Color(.secondarySystemGroupedBackground))   // logged sets show in bold; no tint
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 withAnimation { removeSet(s.ex, n) }
@@ -542,6 +543,18 @@ struct TodayView: View {
     // Ask first only if sets were already logged for it today.
     private func requestRemove(_ s: ExState) {
         if s.logged.isEmpty { removeExercise(s.ex) } else { pendingRemoval = s.ex }
+    }
+
+    // Starting again after ending a workout: clear today's sets for it so every exercise is back
+    // to its original state (pre-filled first set, nothing logged).
+    private func clearTodaysSets() {
+        withAnimation {
+            for ex in workout.exercises { deleteTodaysLogs(of: ex.id) }
+            extraSets = [:]
+            editing = nil
+            expandedID = nil
+            restEnd = nil
+        }
     }
 
     private func resetTimer() {
@@ -858,6 +871,7 @@ private struct WorkoutHeader: View {
     let done: Int
     let total: Int
     let showWorkouts: () -> Void // the dumbbell button: Your workouts
+    let startOver: () -> Void    // ▶ after ending: clear today's sets for this workout
     @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32   // a bit larger than .title (28)
 
     @AppStorage("workoutTimerStart") private var startedAt = 0.0      // when it was last started; 0 = not running
@@ -866,6 +880,7 @@ private struct WorkoutHeader: View {
     @AppStorage("workoutTimerStarted") private var started = false    // pressed Start today
     @AppStorage("workoutTimerFinished") private var finished = false  // pressed Stop today
     @State private var confirmingStop = false
+    @State private var confirmingStartOver = false
 
     private var running: Bool { startedAt > 0 }
 
@@ -897,7 +912,9 @@ private struct WorkoutHeader: View {
                 }
                 Spacer(minLength: 0)
                 if !inProgress {
-                    roundButton("play.fill", label: "Start workout", action: start)
+                    roundButton("play.fill", label: "Start workout") {
+                        if finished && done > 0 { confirmingStartOver = true } else { start() }
+                    }
                         .transition(.opacity.combined(with: .scale))
                 }
                 roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
@@ -924,6 +941,14 @@ private struct WorkoutHeader: View {
             }
         }
         .onAppear(perform: newDayCheck)
+        .confirmationDialog("Start this workout again?", isPresented: $confirmingStartOver, titleVisibility: .visible) {
+            Button("Start again", role: .destructive) {
+                startOver()
+                start()
+            }
+        } message: {
+            Text("Today's sets for this workout will be cleared and everything goes back to the start.")
+        }
         .confirmationDialog("End this workout?", isPresented: $confirmingStop, titleVisibility: .visible) {
             Button("End workout", role: .destructive, action: stop)
         } message: {
