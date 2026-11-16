@@ -80,7 +80,8 @@ struct WorkoutTemplateEditor: View {
     @State private var confirmingDelete = false
     @AppStorage(PlanTemplate.templatesKey) private var templatesRaw = ""
     @State private var draft: WorkoutTemplate?          // non-nil while editing
-    @State private var editMode: EditMode = .inactive
+    @State private var editMode: EditMode = .inactive   // .active only while reordering (shows ≡ handles)
+    @State private var reordering = false
     @State private var showingAdd = false
 
     private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
@@ -109,6 +110,11 @@ struct WorkoutTemplateEditor: View {
                             .font(.title2.bold())
                         Text("\(draftBinding.wrappedValue.focus) · set automatically")
                             .font(.footnote).foregroundStyle(.secondary)
+                        Button(reordering ? "Done reordering" : "Reorder exercises") { toggleReorder() }
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.primary)
+                            .buttonStyle(.borderless)
+                            .padding(.top, 4)
                     }
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
@@ -197,8 +203,44 @@ struct WorkoutTemplateEditor: View {
         return out
     }
 
+    private func toggleReorder() {
+        withAnimation {
+            reordering.toggle()
+            editMode = reordering ? .active : .inactive
+        }
+    }
+
     @ViewBuilder
     private var exerciseSections: some View {
+        if isEditing && reordering {
+            reorderSection
+        } else {
+            groupedSections
+        }
+    }
+
+    // Reorder mode: every exercise as one short line in one list, so dragging is smooth and can
+    // go anywhere (in or out of a superset). Superset members show a small "Superset" tag.
+    private var reorderSection: some View {
+        let list: [ExerciseTemplate] = draft?.exercises ?? []
+        return Section {
+            ForEach(list) { ex in
+                HStack {
+                    Text(ex.name).font(.subheadline.weight(.semibold))
+                    Spacer()
+                    if ex.superset != nil {
+                        Text("Superset").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .onMove(perform: moveExercises)
+        } header: {
+            Text("Drag ≡ to reorder")
+        }
+    }
+
+    @ViewBuilder
+    private var groupedSections: some View {
         let list: [ExerciseTemplate] = (isEditing ? draft?.exercises : saved?.exercises) ?? []
         let all: [ExerciseGroup] = groups(list)
         ForEach(all) { g in
@@ -223,11 +265,6 @@ struct WorkoutTemplateEditor: View {
             // and the rows around it don't redraw.
             ForEach(g.range.map { IndexedExercise(index: $0, exercise: list[$0]) }) { item in
                 editRow(item.index, item.exercise, isLast: item.index == list.count - 1)
-                    .contextMenu { moveMenu(item.index, count: list.count) }
-            }
-            .onMove { from, to in
-                let start = g.range.lowerBound
-                moveExercises(from: IndexSet(from.map { $0 + start }), to: to + start)
             }
         } else {
             ForEach(g.range.map { IndexedExercise(index: $0, exercise: list[$0]) }) { item in
@@ -236,21 +273,6 @@ struct WorkoutTemplateEditor: View {
         }
     }
 
-    @ViewBuilder
-    private func moveMenu(_ i: Int, count: Int) -> some View {
-        if i > 0 {
-            Button("Move up", systemImage: "arrow.up") { withAnimation { swapExercises(i, i - 1) } }
-        }
-        if i < count - 1 {
-            Button("Move down", systemImage: "arrow.down") { withAnimation { swapExercises(i, i + 1) } }
-        }
-    }
-
-    private func swapExercises(_ a: Int, _ b: Int) {
-        guard var d = draft, d.exercises.indices.contains(a), d.exercises.indices.contains(b) else { return }
-        d.exercises.swapAt(a, b)
-        draft = d
-    }
 
     // One exercise while editing: name and remove, then sets (− / +) and reps, then the
     // superset link to the next exercise. Drag the ≡ handle to reorder.
@@ -372,7 +394,7 @@ struct WorkoutTemplateEditor: View {
 
     private func startEditing() {
         draft = saved
-        withAnimation { editMode = .active }
+        reordering = false
     }
 
     private func cancel() {
@@ -382,6 +404,7 @@ struct WorkoutTemplateEditor: View {
         }
         withAnimation {
             draft = nil
+            reordering = false
             editMode = .inactive
         }
     }
@@ -389,7 +412,6 @@ struct WorkoutTemplateEditor: View {
     private func startNewIfNeeded() {
         guard isNew, saved == nil, draft == nil else { return }
         draft = WorkoutTemplate(id: workoutID, title: "Workout \(workoutID)", exercises: [])
-        editMode = .active
     }
 
     private func deleteWorkout() {
@@ -416,6 +438,7 @@ struct WorkoutTemplateEditor: View {
         templatesRaw = PlanTemplate.encodeTemplates(all)
         withAnimation {
             draft = nil
+            reordering = false
             editMode = .inactive
         }
     }
