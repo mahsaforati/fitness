@@ -110,10 +110,6 @@ struct WorkoutTemplateEditor: View {
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
                 }
-            } else if let w = saved {
-                Section {
-                    LabeledContent("Focus", value: w.focus)
-                }
             }
             exerciseSections
             if isEditing {
@@ -144,7 +140,7 @@ struct WorkoutTemplateEditor: View {
             Text("It's removed from your plan. Sets you've already logged are kept.")
         }
         .environment(\.editMode, $editMode)
-        .navigationTitle(shown?.name ?? "Workout")
+        .navigationTitle("")   // no workout name in the middle of the top bar
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(isEditing)
         .toolbar { toolbarContent }
