@@ -71,7 +71,6 @@ struct TodayView: View {
             addExerciseSection
         }
         .environment(\.defaultMinListRowHeight, 0)   // lets the rest line sit close under the exercise name
-        .listSectionSpacing(.compact)                 // each exercise is its own card; keep them close
     }
 
     private func openWorkouts() { showingWorkouts = true }
@@ -180,7 +179,7 @@ struct TodayView: View {
     private func blocks(_ states: [ExState]) -> [Block] {
         var out: [Block] = []
         for s in states {
-            if let last = out.last, let tag = s.ex.superset, last.tag == tag {
+            if let last = out.last, last.tag == s.ex.superset {
                 out[out.count - 1].states.append(s)
             } else {
                 out.append(Block(tag: s.ex.superset, states: [s]))
@@ -191,20 +190,17 @@ struct TodayView: View {
 
     @ViewBuilder
     private func blockSection(_ b: Block, openID: String?) -> some View {
-        let groupOpen: Bool = b.states.contains { $0.ex.id == openID }
-        let anyOpen: Bool = !(openID ?? "").isEmpty
+        let groupOpen = b.isSuperset && b.states.contains { $0.ex.id == openID }
         Section {
             if groupOpen {
-                openCard {
-                    if b.isSuperset {
-                        supersetRows(b)   // one card: log all exercises of a round at once
-                    } else {
-                        expandedRows(b.states[0])
-                    }
-                }
+                supersetRows(b)   // one card: log both exercises of a round at once
             } else {
                 ForEach(b.states, id: \.ex.id) { s in
-                    collapsedRow(s, compact: anyOpen)
+                    if s.ex.id == openID {
+                        expandedRows(s)
+                    } else {
+                        collapsedRow(s)
+                    }
                 }
             }
         } header: {
@@ -298,9 +294,11 @@ struct TodayView: View {
                 .monospacedDigit()
                 .foregroundStyle(Tone.ink)
         }
-        .contextMenu {
-            Button("Remove round", systemImage: "trash", role: .destructive) {
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
                 withAnimation { removeRound(b, r) }
+            } label: {
+                Label("Remove", systemImage: "trash")
             }
         }
     }
@@ -401,47 +399,7 @@ struct TodayView: View {
 
     // MARK: - Rows
 
-    // The open exercise: one raised card (white, soft shadow) with more room.
-    private func openCard<C: View>(@ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            content()
-        }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
-                .shadow(color: .black.opacity(0.10), radius: 10, x: 0, y: 4)
-        )
-        .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 12, trailing: 0))
-        .listRowSeparator(.hidden)
-    }
-
-    // Closed exercise. While another exercise is open it shrinks to one thin line (name and ✓).
-    @ViewBuilder
-    private func collapsedRow(_ s: ExState, compact: Bool) -> some View {
-        if compact {
-            Button {
-                withAnimation { expandedID = s.ex.id; editing = nil }
-            } label: {
-                HStack {
-                    Text(s.ex.name).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer()
-                    if s.done {
-                        Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(Tone.check)
-                            .accessibilityLabel("Done")
-                    }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.borderless)
-            .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-        } else {
-            fullCollapsedRow(s)
-        }
-    }
-
-    private func fullCollapsedRow(_ s: ExState) -> some View {
+    private func collapsedRow(_ s: ExState) -> some View {
         Button {
             withAnimation { expandedID = s.ex.id; editing = nil }
         } label: {
@@ -493,7 +451,7 @@ struct TodayView: View {
                 withAnimation { expandedID = ""; editing = nil }
             } label: {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(s.ex.name).font(.title3.weight(.semibold)).foregroundStyle(Color.primary)
+                    Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
                     Text(planLine(s)).font(.subheadline).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -743,11 +701,6 @@ struct TodayView: View {
             }
         }
         .contextMenu {
-            if log != nil {
-                Button("Remove set", systemImage: "trash", role: .destructive) {
-                    withAnimation { removeSet(s.ex, n) }
-                }
-            }
             if log == nil {
                 Button("Change before logging", systemImage: "slider.horizontal.3") {
                     editing = SetEdit(exercise: s.ex, setNumber: n, weight: displayWeight(sug.kg),

@@ -35,4 +35,3 @@ Requires iOS 17+.
 - **Timed exercises** (plank, side plank): no weight, just seconds (− / + in 5 s steps, shown as "30 s")
 - **Up next goes in order**: Today shows the workout after the one you last did on an earlier day (A → B → C → A…), not by weekday. Nothing logged yet → A
 - **Your workouts** list has no Today/Scheduled labels; opening one shows its exercises and a **Let's Do This!** button that makes it today's workout
-- **Open exercise stands out**: each exercise is its own card; the open one is a larger raised card (soft shadow, bigger name), and while it's open the others shrink to one thin line. Inside the card, tap a logged set to change or remove it (or long-press it)
