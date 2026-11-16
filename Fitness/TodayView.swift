@@ -57,8 +57,8 @@ struct TodayView: View {
                     WorkoutHeader(title: workout.title, done: doneCount, total: states.count,
                                   showWorkouts: { showingWorkouts = true })
                         .listRowBackground(Color.clear)
-                        // Its own alignment, separate from the exercises: close to the card edges on both sides.
-                        .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4))
+                        // Its own alignment, separate from the exercises: 12pt in from the card edges on both sides.
+                        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
                         .listRowSeparator(.hidden)
                 }
 
