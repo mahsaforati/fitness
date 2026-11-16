@@ -12,6 +12,7 @@ iOS app (SwiftUI + SwiftData) for logging weights and reps against a 6-month hom
 - **Supersets**: exercises tagged with the same `superset` in `PlanTemplate.swift` sit together under a "Superset" header, numbered 1, 2…, open together, and the rest timer starts only after one set of each (Workout B: Rear-delt fly + Push-ups)
 - Sets save instantly (one record per set per day), a rest timer starts after each set, and a bar shows exercises done
 - **Start workout**: a grey ▶ button at the end of the workout name (next to the dumbbell) starts the workout; there's no progress bar until you tap it. Then a thick bar shows exercises done and the workout time, with Pause/Resume and Stop beside it. Stop asks first; then ▶ comes back, with "✓ Done in 42:10" under the title if every exercise was finished (starting again gives a fresh timer, logged sets kept). Resets each new day
+- **One set at a time**: an open exercise shows the sets you've logged plus the next one ("Set 2 of 3"); logging it brings up the next until the plan's sets are done. + Add set and Same as last time work as before
 - Weights stored in kg, shown in **lb by default**; switch units on the Plan tab
 - **Calendar**: month grid in the Figma style; days with logged sets show A/B/C, tap a day to see its sets and volume
 - Every Phase 1 exercise has a swipeable how-to card: short steps + "avoid" tip, then a looping animation with worked muscles highlighted

@@ -265,7 +265,9 @@ struct TodayView: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
 
-        ForEach(0..<s.count, id: \.self) { i in
+        // One set at a time: the sets you've logged, plus the next one to do.
+        // Logging it brings up the next, until the planned number is done.
+        ForEach(0..<s.visibleCount, id: \.self) { i in
             setRow(s, i + 1)
         }
 
@@ -331,7 +333,7 @@ struct TodayView: View {
             }
         } label: {
             HStack(spacing: 12) {
-                Text("Set \(n)")
+                Text("Set \(n) of \(s.count)")
                     .foregroundStyle(log != nil ? Tone.ink : Color.secondary)
                 Spacer()
                 Text(value)
@@ -369,6 +371,11 @@ struct TodayView: View {
         let last: [Int: SetLog]     // previous session's sets by set number
         let count: Int              // set rows shown today (plan ± added/removed sets)
         var done: Bool { (0..<count).allSatisfy { logged[$0 + 1] != nil } }
+        // Rows shown: every set up to and including the first one not logged yet.
+        var visibleCount: Int {
+            let next = (1...max(count, 1)).first { logged[$0] == nil } ?? count
+            return min(count, next)
+        }
     }
 
     private func state(for ex: ExerciseTemplate) -> ExState {
