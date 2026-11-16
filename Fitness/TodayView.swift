@@ -16,7 +16,7 @@ struct TodayView: View {
     @Query(sort: \SetLog.date) private var allLogs: [SetLog]
 
     @State private var path: [ExerciseTemplate] = []
-    @State private var expandedID: String? = nil      // nil = follow progress; "" = all closed
+    @State private var expandedID: String? = ""       // nil = follow progress; "" = all closed (how Today starts)
     @State private var extraSets: [String: Int] = [:]  // sets added (+) or removed (−) vs the plan, for today
     @State private var editing: SetEdit?
     @State private var restEnd: Date?
@@ -160,7 +160,7 @@ struct TodayView: View {
     }
 
     private func workoutChanged() {
-        expandedID = nil
+        expandedID = ""   // a newly picked workout starts with every exercise closed
         extraSets = [:]
         if timerFinished { resetTimer() }   // finished one workout, now doing another
     }
@@ -664,7 +664,7 @@ struct TodayView: View {
             extraSets = [:]
             drafts = [:]
             editing = nil
-            expandedID = nil
+            expandedID = ""   // back to the beginning: everything closed
             restEnd = nil
         }
     }
@@ -703,7 +703,7 @@ struct TodayView: View {
         for id in dayEdit.added { deleteTodaysLogs(of: id); extraSets[id] = nil }
         withAnimation {
             updateEdit { $0 = DayEdit() }
-            expandedID = nil
+            expandedID = ""
         }
     }
 
