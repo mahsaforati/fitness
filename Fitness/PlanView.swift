@@ -82,6 +82,7 @@ struct WorkoutTemplateEditor: View {
     @State private var draft: WorkoutTemplate?          // non-nil while editing
     @State private var editMode: EditMode = .inactive
     @State private var showingAdd = false
+    @State private var openedEditor = false   // opened straight into edit mode once
 
     private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
     private var saved: WorkoutTemplate? { workouts.first { $0.id == workoutID } }
@@ -462,18 +463,18 @@ struct WorkoutTemplateEditor: View {
         withAnimation { editMode = .active }
     }
 
+    // ✕: back to the Plan tab without saving.
     private func cancel() {
-        if isNew && saved == nil {   // never saved: nothing to go back to
-            dismiss()
-            return
-        }
-        withAnimation {
-            draft = nil
-            editMode = .inactive
-        }
+        dismiss()
     }
 
     private func startNewIfNeeded() {
+        // Tapping a workout on the Plan tab opens it straight in edit mode.
+        if !isNew, draft == nil, saved != nil, !openedEditor {
+            openedEditor = true
+            startEditing()
+            return
+        }
         guard isNew, saved == nil, draft == nil else { return }
         draft = WorkoutTemplate(id: workoutID, title: "Workout \(workoutID)", exercises: [])
         editMode = .active
@@ -501,10 +502,7 @@ struct WorkoutTemplateEditor: View {
             all.append(edited)   // a new workout joins the end of the plan
         }
         templatesRaw = PlanTemplate.encodeTemplates(all)
-        withAnimation {
-            draft = nil
-            editMode = .inactive
-        }
+        dismiss()   // ✓: saved, back to the Plan tab
     }
 
     private func exerciseRow(_ ex: ExerciseTemplate) -> some View {
