@@ -113,8 +113,8 @@ struct WorkoutTemplateEditor: View {
                             .fixedSize()
                             .focused($nameFocused)
                         Image(systemName: "pencil")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         Spacer(minLength: 0)
                     }
                     .contentShape(Rectangle())
