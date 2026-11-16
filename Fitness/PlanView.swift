@@ -1,10 +1,10 @@
 import SwiftUI
 
-// Plan tab: units and your workout templates (tap one to see and edit it).
+// Plan tab: your workout templates (tap one to see and edit it); ⚙︎ top right opens Settings.
 struct PlanView: View {
-    @AppStorage("units") private var unitsRaw = UnitSystem.imperial.rawValue
     @AppStorage(PlanTemplate.templatesKey) private var templatesRaw = ""
     @State private var confirmingReset = false
+    @State private var showingSettings = false
 
     private var workouts: [WorkoutTemplate] { PlanTemplate.templates(from: templatesRaw) }
 
@@ -20,13 +20,6 @@ struct PlanView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Units") {
-                    Picker("Units", selection: $unitsRaw) {
-                        Text("Imperial").tag(UnitSystem.imperial.rawValue)
-                        Text("Metric").tag(UnitSystem.metric.rawValue)
-                    }.pickerStyle(.segmented)
-                }
-
                 Section {
                     ForEach(workouts) { w in
                         NavigationLink(value: w.id) {
@@ -53,6 +46,13 @@ struct PlanView: View {
                 }
             }
             .navigationTitle("Your plan")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showingSettings = true } label: { Image(systemName: "gearshape") }
+                        .accessibilityLabel("Settings")
+                }
+            }
+            .sheet(isPresented: $showingSettings) { SettingsView() }
             .navigationDestination(for: String.self) { value in
                 if value.hasPrefix("new:") {
                     WorkoutTemplateEditor(workoutID: String(value.dropFirst(4)), isNew: true)
@@ -332,4 +332,46 @@ struct ExerciseTemplateEditor: View {
         workout.exercises[o].superset = tag
         workout.exercises[i].superset = tag
     }
+}
+
+// MARK: - Settings (⚙︎ on the Plan tab): units and rest time
+
+struct SettingsView: View {
+    @AppStorage("units") private var unitsRaw = UnitSystem.imperial.rawValue
+    @AppStorage("restSeconds") private var restSeconds = 80   // same key Today's rest timer uses
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Units") {
+                    Picker("Units", selection: $unitsRaw) {
+                        Text("Imperial (lb)").tag(UnitSystem.imperial.rawValue)
+                        Text("Metric (kg)").tag(UnitSystem.metric.rawValue)
+                    }
+                    .pickerStyle(.segmented)
+                }
+                Section {
+                    Stepper(value: $restSeconds, in: 15...300, step: 15) {
+                        HStack {
+                            Text("Rest between sets")
+                            Spacer()
+                            Text(clock(restSeconds)).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Rest timer")
+                } footer: {
+                    Text("Starts after each set (or each superset round). Change it in 15-second steps.")
+                }
+            }
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
+        }
+    }
+
+    private func clock(_ s: Int) -> String { String(format: "%d:%02d", s / 60, s % 60) }
 }

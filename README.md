@@ -13,7 +13,7 @@ iOS app (SwiftUI + SwiftData) for logging weights and reps against a 6-month hom
 - Sets save instantly (one record per set per day), a rest timer starts after each set (a thin countdown line inside the open exercise, right under its name, with −10s and +10s), and a bar shows exercises done
 - **Start workout**: a grey ▶ button at the end of the workout name (next to the dumbbell) starts the workout; there's no progress bar until you tap it. Then a thick bar shows exercises done and the workout time, with Pause/Resume and Stop beside it. Stop asks first; then ▶ comes back, with "✓ Done in 42:10" under the title if every exercise was finished (▶ again clears today's sets for that workout and starts fresh). Resets each new day
 - **Logging sets**: an open exercise starts with one pre-filled set (from last time, or a starting value) with − / + for weight and reps right in the row, and a **Log** button. After that, **Repeat** logs another set with the same numbers and **Add** opens a new set to change. The exercise ticks off once the plan's sets are logged; you can keep repeating after that
-- Weights stored in kg, shown in **lb by default**; switch units on the Plan tab
+- Weights stored in kg, shown in **lb by default**; switch units in Settings (⚙︎ top right of the Plan tab)
 - **Calendar**: month grid in the Figma style; days with logged sets show A/B/C, tap a day to see its sets and volume
 - Every Phase 1 exercise has a swipeable how-to card: short steps + "avoid" tip, then a looping animation with worked muscles highlighted
 
@@ -38,3 +38,4 @@ Requires iOS 17+.
 - **Auto start**: logging a set when the workout isn't running does what ▶ does: starts the timer and progress bar (resumes if paused; a new timer if it was stopped, keeping your sets)
 - **Edit your workouts** (Plan tab): tap a workout to see it; tap **Edit** to rename it, add / remove / drag to reorder exercises, and tap an exercise to change sets, reps (or time) and supersets. Nothing is saved until you tap **✓**; **✕** discards the changes. Saved on the iPhone; **Reset to the original plan** undoes all edits. Today and Calendar use your edited workouts
 - **New workout** (Plan tab): opens a blank workout (D, E…) in edit mode; add exercises and tap ✓ to save it (✕ discards it). It joins the rotation after the others. While editing a workout, **Delete workout** removes it (logged sets are kept)
+- **Settings** (⚙︎ top right of the Plan tab): units (lb / kg) and rest time between sets (15 s steps, 0:15–5:00; default 1:20)
