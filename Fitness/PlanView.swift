@@ -118,13 +118,7 @@ struct WorkoutTemplateEditor: View {
                     LabeledContent("Focus", value: w.focus)
                 }
             }
-            Section {
-                exerciseRows
-            } header: {
-                Text("Exercises")
-            } footer: {
-                if !isEditing { Text("Tap Edit to change this workout.") }
-            }
+            exerciseSections
             if isEditing {
                 Section {
                     Button { showingAdd = true } label: {
@@ -166,19 +160,84 @@ struct WorkoutTemplateEditor: View {
         }
     }
 
-    @ViewBuilder
-    private var exerciseRows: some View {
-        if isEditing {
-            let list = draftBinding.wrappedValue.exercises
-            ForEach(Array(list.enumerated()), id: \.element.id) { i, ex in
-                editRow(i, ex, isLast: i == list.count - 1)
+    // Exercises in cards: runs of normal exercises share a card; each superset gets its own card
+    // labelled "Superset". Drag (iOS handles) reorders within a card; long-press → Move up / down
+    // moves an exercise across cards.
+    private struct ExerciseGroup: Identifiable {
+        let range: Range<Int>
+        let isSuperset: Bool
+        var id: Int { range.lowerBound }
+    }
+
+    private func groups(_ list: [ExerciseTemplate]) -> [ExerciseGroup] {
+        var out: [ExerciseGroup] = []
+        var i = 0
+        while i < list.count {
+            var j = i + 1
+            if let tag = list[i].superset {
+                while j < list.count, list[j].superset == tag { j += 1 }
             }
-            .onMove { from, to in draftBinding.wrappedValue.exercises.move(fromOffsets: from, toOffset: to) }
-        } else {
-            ForEach(saved?.exercises ?? []) { ex in
-                exerciseRow(ex)
+            let isSuperset = j - i > 1
+            if !isSuperset {
+                // a run of normal exercises (or lone superset leftovers) shares one card
+                while j < list.count {
+                    if let t = list[j].superset, j + 1 < list.count, list[j + 1].superset == t { break }
+                    j += 1
+                }
+            }
+            out.append(ExerciseGroup(range: i..<j, isSuperset: isSuperset))
+            i = j
+        }
+        return out
+    }
+
+    @ViewBuilder
+    private var exerciseSections: some View {
+        let list: [ExerciseTemplate] = (isEditing ? draftBinding.wrappedValue.exercises : saved?.exercises) ?? []
+        let all = groups(list)
+        ForEach(all) { g in
+            Section {
+                if isEditing {
+                    ForEach(Array(g.range), id: \.self) { i in
+                        editRow(i, list[i], isLast: i == list.count - 1)
+                            .contextMenu { moveMenu(i, count: list.count) }
+                    }
+                    .onMove { from, to in
+                        let start = g.range.lowerBound
+                        draftBinding.wrappedValue.exercises.move(
+                            fromOffsets: IndexSet(from.map { $0 + start }), toOffset: to + start)
+                    }
+                } else {
+                    ForEach(Array(g.range), id: \.self) { i in
+                        exerciseRow(list[i])
+                    }
+                }
+            } header: {
+                if g.isSuperset {
+                    Label("Superset", systemImage: "arrow.triangle.2.circlepath")
+                } else if g.id == 0 {
+                    Text("Exercises")
+                }
+            } footer: {
+                if !isEditing && g.id == all.last?.id { Text("Tap Edit to change this workout.") }
             }
         }
+    }
+
+    @ViewBuilder
+    private func moveMenu(_ i: Int, count: Int) -> some View {
+        if i > 0 {
+            Button("Move up", systemImage: "arrow.up") { withAnimation { swapExercises(i, i - 1) } }
+        }
+        if i < count - 1 {
+            Button("Move down", systemImage: "arrow.down") { withAnimation { swapExercises(i, i + 1) } }
+        }
+    }
+
+    private func swapExercises(_ a: Int, _ b: Int) {
+        guard draftBinding.wrappedValue.exercises.indices.contains(a),
+              draftBinding.wrappedValue.exercises.indices.contains(b) else { return }
+        draftBinding.wrappedValue.exercises.swapAt(a, b)
     }
 
     // One exercise while editing: name and remove, then sets (− / +) and reps, then the
