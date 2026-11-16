@@ -203,7 +203,16 @@ struct WorkoutTemplateEditor: View {
                 groupRows(g, list)
             } header: {
                 if g.isSuperset {
-                    Label("Superset", systemImage: "arrow.triangle.2.circlepath")
+                    HStack {
+                        Label("Superset", systemImage: "arrow.triangle.2.circlepath")
+                        Spacer()
+                        if isEditing {
+                            // Move the whole superset one place up / down.
+                            supersetArrow("arrow.up", range: g.range, up: true, canMove: g.range.lowerBound > 0)
+                            supersetArrow("arrow.down", range: g.range, up: false,
+                                          canMove: g.range.upperBound < list.count)
+                        }
+                    }
                 } else if g.id == 0 {
                     Text("Exercises")
                 }
@@ -240,6 +249,50 @@ struct WorkoutTemplateEditor: View {
                 exerciseRow(item.exercise)
             }
         }
+    }
+
+    private func supersetArrow(_ icon: String, range: Range<Int>, up: Bool, canMove: Bool) -> some View {
+        Button {
+            withAnimation { moveSuperset(range, up: up) }
+        } label: {
+            Image(systemName: icon)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.primary)
+                .frame(width: 32, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .disabled(!canMove)
+        .opacity(canMove ? 1 : 0.3)
+        .accessibilityLabel(up ? "Move superset up" : "Move superset down")
+    }
+
+    // Blocks = single exercises, or whole supersets (next-to-each-other exercises with one tag).
+    private func blockRanges(_ list: [ExerciseTemplate]) -> [Range<Int>] {
+        var out: [Range<Int>] = []
+        var i = 0
+        while i < list.count {
+            var j = i + 1
+            if let tag = list[i].superset {
+                while j < list.count, list[j].superset == tag { j += 1 }
+            }
+            out.append(i..<j)
+            i = j
+        }
+        return out
+    }
+
+    // Swap the superset with the block (exercise or superset) above / below it.
+    private func moveSuperset(_ range: Range<Int>, up: Bool) {
+        guard var d = draft else { return }
+        let list = d.exercises
+        var chunks = blockRanges(list).map { Array(list[$0]) }
+        guard let k = blockRanges(list).firstIndex(of: range) else { return }
+        let other = up ? k - 1 : k + 1
+        guard chunks.indices.contains(other) else { return }
+        chunks.swapAt(k, other)
+        d.exercises = chunks.flatMap { $0 }
+        draft = d
     }
 
     @ViewBuilder
