@@ -5,7 +5,9 @@ import SwiftData
 // - The exercise you're on opens up with a row per set (swipe left to remove one); finished exercises close with a ✓ and the next one opens.
 // - Tap a set row to log it with last session's numbers; tap a logged row to change it right there (− / +).
 // - Start with one pre-filled set and a Log button; then Repeat logs the same numbers again and Add opens a new set to change.
-// - Everything saves as soon as you log it (one record per set per day), and a rest timer starts.
+// - Everything saves as soon as you log it (one record per set per day), and a rest timer starts:
+//   the big ring at the top counts the rest down, then goes back to showing your sets.
+// - Each exercise has a ring that fills set by set; a finished one turns green.
 struct TodayView: View {
     @AppStorage("units") private var unitsRaw = UnitSystem.imperial.rawValue
     private var units: UnitSystem { UnitSystem(rawValue: unitsRaw) ?? .imperial }
@@ -64,9 +66,11 @@ struct TodayView: View {
     private var todayList: some View {
         let states = workout.exercises.map(state(for:))
         let doneCount = states.filter(\.done).count
+        let setsDone = states.reduce(0) { $0 + min($1.logged.count, $1.count) }
+        let setsTotal = states.reduce(0) { $0 + $1.count }
         let openID = expandedID ?? states.first(where: { !$0.done })?.ex.id
         return List {
-            headerSection(done: doneCount, total: states.count)
+            headerSection(done: doneCount, total: states.count, setsDone: setsDone, setsTotal: setsTotal)
             ForEach(blocks(states)) { b in
                 blockSection(b, openID: openID)
             }
@@ -77,8 +81,13 @@ struct TodayView: View {
 
     private func openWorkouts() { showingWorkouts = true }
 
-    private func headerSection(done: Int, total: Int) -> some View {
+    // Skip: tap the ring (or the Skip button) while resting.
+    private func skipRest() { withAnimation(.easeOut(duration: 0.3)) { restEnd = nil } }
+
+    private func headerSection(done: Int, total: Int, setsDone: Int, setsTotal: Int) -> some View {
         let header = WorkoutHeader(title: workout.displayTitle, done: done, total: total,
+                                   setsDone: setsDone, setsTotal: setsTotal,
+                                   restEnd: restEnd, restTotal: restTotal, skipRest: skipRest,
                                    showWorkouts: openWorkouts, startOver: clearTodaysSets)
         return Section {
             header
@@ -245,7 +254,6 @@ struct TodayView: View {
         let finished: Int = completedRounds(b)
         let current: Int = finished + 1
         supersetNames(b)
-        restLine(for: b.states[0])
         ForEach(roundNumbers(upTo: finished), id: \.self) { r in
             doneRoundRow(b, r)
         }
@@ -280,7 +288,6 @@ struct TodayView: View {
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture { withAnimation { expandedID = ""; editing = nil } }
-        .listRowSeparator(isResting(b.states[0]) ? .hidden : .automatic, edges: .bottom)
     }
 
     // "Round 1        10×12 · BW×8 · 30 s" — swipe left to remove the round.
@@ -406,24 +413,21 @@ struct TodayView: View {
         Button {
             withAnimation { expandedID = s.ex.id; editing = nil }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
+                SetRing(done: s.loggedCount, total: s.count, finished: s.done)
                 VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 6) {
-                        Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
-                    }
-                    Text(collapsedSubtitle(s)).font(.subheadline).foregroundStyle(.secondary)
+                    Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
+                    subtitleText(s, collapsedSubtitle(s))
                 }
                 Spacer()
-                if s.done {
-                    Image(systemName: "checkmark").font(.subheadline.bold()).foregroundStyle(Tone.check)
-                        .accessibilityLabel("Done")
-                } else {
+                if !s.done {
                     Image(systemName: "chevron.down").font(.footnote).foregroundStyle(.tertiary)
                 }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
+        .listRowBackground(rowBackground(s))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
     }
@@ -444,18 +448,32 @@ struct TodayView: View {
     @ViewBuilder
     private func expandedRows(_ s: ExState) -> some View {
         exerciseHeader(s)
-        restLine(for: s)   // always right under the exercise name, so it doesn't move as sets are added
         setsArea(s)
     }
 
+    // A finished exercise's rows turn light sage.
+    private func rowBackground(_ s: ExState) -> Color {
+        s.done ? Tone.done : Color(.secondarySystemGroupedBackground)
+    }
+
+    // Done exercises say so in dark sage; the rest stay grey.
+    private func subtitleText(_ s: ExState, _ text: String) -> some View {
+        Text(text)
+            .font(.subheadline.weight(s.done ? .medium : .regular))
+            .foregroundStyle(s.done ? Tone.doneText : Color.secondary)
+    }
+
     private func exerciseHeader(_ s: ExState) -> some View {
-        HStack(alignment: .top) {
+        HStack(alignment: .center) {
             Button {
                 withAnimation { expandedID = ""; editing = nil }
             } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
-                    Text(planLine(s)).font(.subheadline).foregroundStyle(.secondary)
+                HStack(spacing: 14) {
+                    SetRing(done: s.loggedCount, total: s.count, finished: s.done)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(s.ex.name).font(.headline).foregroundStyle(Color.primary)
+                        subtitleText(s, s.done ? collapsedSubtitle(s) : planLine(s))
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
@@ -463,15 +481,11 @@ struct TodayView: View {
             .buttonStyle(.borderless)
             howButton(s)
         }
-        .padding(.top, 4)
-        .padding(.bottom, isResting(s) ? 0 : 4)
-        // No divider between the name and the rest line under it.
-        .listRowSeparator(isResting(s) ? .hidden : .automatic, edges: .bottom)
+        .padding(.vertical, 4)
+        .listRowBackground(rowBackground(s))
         .swipeActions(edge: .trailing, allowsFullSwipe: false) { removeButton(s, iconOnly: true) }
         .contextMenu { removeButton(s) }
     }
-
-    private func isResting(_ s: ExState) -> Bool { restEnd != nil && restFor == s.ex.id }
 
     @ViewBuilder
     private func howButton(_ s: ExState) -> some View {
@@ -496,30 +510,7 @@ struct TodayView: View {
             setRow(s, n)
         }
         nextAction(s, next: (loggedNumbers.last ?? 0) + 1, firstSet: loggedNumbers.isEmpty)
-    }
-
-    @ViewBuilder
-    private func restLine(for s: ExState) -> some View {
-        if let end = restEnd, restFor == s.ex.id {
-            RestLine(end: end, total: restTotal,
-                     add: { changeRest(end, by: 10) },
-                     subtract: { changeRest(end, by: -10) })
-                .listRowSeparator(.hidden, edges: .top)
-                .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 10, trailing: 20))   // tight under the name
-                .transition(.opacity)
-        }
-    }
-
-    // +10 s / −10 s. Going below zero just ends the rest.
-    private func changeRest(_ end: Date, by seconds: Double) {
-        let newEnd = end.addingTimeInterval(seconds)
-        if newEnd <= .now {
-            withAnimation { restEnd = nil }
-            restDoneCount += 1
-        } else {
-            restEnd = newEnd
-            restTotal = max(1, restTotal + seconds)
-        }
+            .listRowBackground(rowBackground(s))
     }
 
     @ViewBuilder
@@ -656,7 +647,7 @@ struct TodayView: View {
                             onRemove: { withAnimation { editing = nil; if e.isLogged { removeSet(s.ex, n) } } },
                             onCancel: { withAnimation { editing = nil } })
                 .id(e.id)
-                .listRowBackground(Color(.secondarySystemGroupedBackground))
+                .listRowBackground(rowBackground(s))
         } else {
             setButtonRow(s, n)
         }
@@ -691,11 +682,11 @@ struct TodayView: View {
                     .monospacedDigit()
                     .foregroundStyle(log != nil ? Tone.ink : Color.secondary)
             }
-            .padding(.leading, 8)
+            .padding(.leading, 54)   // lines up with the exercise name, past its ring
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .listRowBackground(Color(.secondarySystemGroupedBackground))   // logged sets show in bold; no tint
+        .listRowBackground(rowBackground(s))   // logged sets show in bold; light sage once the exercise is done
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 withAnimation { removeSet(s.ex, n) }
@@ -721,6 +712,7 @@ struct TodayView: View {
         let last: [Int: SetLog]     // previous session's sets by set number
         let count: Int              // set rows shown today (plan ± added/removed sets)
         var done: Bool { (0..<count).allSatisfy { logged[$0 + 1] != nil } }
+        var loggedCount: Int { min(logged.count, count) }
 
     }
 
@@ -759,10 +751,14 @@ struct TodayView: View {
         return units == .imperial ? 10 / 2.20462 : 5
     }
 
+    // "3 × 10 · 25 lb" (last time), or "Done · 3 × 10 · 30 lb" (today's top weight). The ring shows the set count.
     private func collapsedSubtitle(_ s: ExState) -> String {
+        if s.done {
+            var parts = ["Done", "\(s.ex.sets) × \(s.ex.reps)"]
+            if let kg = s.logged.values.map(\.weightKg).max(), kg > 0 { parts.append("\(format(kg)) \(units.label)") }
+            return parts.joined(separator: " · ")
+        }
         var parts = ["\(s.ex.sets) × \(s.ex.reps)"]
-        let count = s.logged.count
-        if count > 0 && !s.done { parts.append("\(count)/\(s.count) sets") }
         if let w = lastWeight(s) { parts.append(w) }
         return parts.joined(separator: " · ")
     }
@@ -979,6 +975,110 @@ private enum Tone {
     static let done  = Color(red: 0.890, green: 0.910, blue: 0.878) // #E3E8E0 sage
     static let check = Color(red: 0.420, green: 0.520, blue: 0.400) // darker sage for ✓
     static let ink   = Color(red: 0.110, green: 0.098, blue: 0.090) // #1C1917
+    static let ring  = Color(red: 0.369, green: 0.478, blue: 0.345) // #5E7A58 set rings, done circle
+    static let doneText = Color(red: 0.247, green: 0.353, blue: 0.231) // #3F5A3B "Done · …"
+    static let ringTrack = Color(red: 0.941, green: 0.937, blue: 0.933) // #F0EFEE
+}
+
+// MARK: - Set ring (each exercise)
+// Fills a part per set: "2/3" in the middle. Done = a solid sage circle with a white ✓.
+private struct SetRing: View {
+    let done: Int
+    let total: Int
+    let finished: Bool
+
+    var body: some View {
+        ZStack {
+            if finished {
+                Circle().fill(Tone.ring)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+            } else {
+                Circle().stroke(Color(.systemGray5), lineWidth: 5).padding(2.5)
+                Circle()
+                    .trim(from: 0, to: total > 0 ? CGFloat(done) / CGFloat(total) : 0)
+                    .stroke(Tone.ring, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .padding(2.5)
+                Text("\(done)/\(total)")
+                    .font(.system(size: 11, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color.primary)
+            }
+        }
+        .frame(width: 40, height: 40)
+        .animation(.easeOut(duration: 0.35), value: done)
+        .animation(.easeOut(duration: 0.35), value: finished)
+        .accessibilityElement()
+        .accessibilityLabel(finished ? "Done" : "\(done) of \(total) sets")
+    }
+}
+
+// MARK: - Workout ring (header)
+// Shows "6/15" with a light sage ring for the sets done today. While resting it turns dark and
+// counts the rest down ("Rest 0:52"), then goes back to the sets. Tap it while resting to skip.
+private struct HeaderRing: View {
+    let setsDone: Int
+    let setsTotal: Int
+    let restEnd: Date?
+    let restTotal: Double
+    let skip: () -> Void
+
+    static let sageFill = Color(red: 0.788, green: 0.820, blue: 0.773) // #C9D1C5
+
+    private var allDone: Bool { setsTotal > 0 && setsDone >= setsTotal }
+
+    var body: some View {
+        Group {
+            if let end = restEnd {
+                TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
+                    let left = max(0, end.timeIntervalSince(ctx.date))
+                    ring(fraction: restTotal > 0 ? left / restTotal : 0, color: Tone.ink) {
+                        VStack(spacing: 0) {
+                            Text("Rest").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+                            Text(clock(left)).font(.system(size: 16, weight: .bold)).monospacedDigit()
+                        }
+                    }
+                    .accessibilityLabel("Rest, \(Int(left.rounded(.up))) seconds left")
+                }
+            } else {
+                ring(fraction: setsTotal > 0 ? Double(setsDone) / Double(setsTotal) : 0,
+                     color: allDone ? Tone.ring : Self.sageFill) {
+                    Text("\(setsDone)/\(setsTotal)")
+                        .font(.system(size: setsTotal >= 100 ? 12 : 15, weight: .bold))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.7)
+                }
+                .accessibilityLabel("\(setsDone) of \(setsTotal) sets done")
+            }
+        }
+        .foregroundStyle(Tone.ink)
+        .contentShape(Circle())
+        .onTapGesture { if restEnd != nil { skip() } }
+        .accessibilityElement(children: .combine)
+        .accessibilityAction(named: "Skip rest") { if restEnd != nil { skip() } }
+        .animation(.easeInOut(duration: 0.35), value: restEnd == nil)
+    }
+
+    private func ring<C: View>(fraction: Double, color: Color, @ViewBuilder center: () -> C) -> some View {
+        ZStack {
+            Circle().stroke(Tone.ringTrack, lineWidth: 8)
+            Circle()
+                .trim(from: 0, to: CGFloat(min(1, max(0, fraction))))
+                .stroke(color, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 0.25), value: fraction)
+            center()
+        }
+        .padding(4)
+        .frame(width: 64, height: 64)
+    }
+
+    private func clock(_ t: TimeInterval) -> String {
+        let secs = Int(t.rounded(.up))
+        return String(format: "%d:%02d", secs / 60, secs % 60)
+    }
 }
 
 // MARK: - Inline set editor (− / + for weight and reps)
@@ -1218,25 +1318,37 @@ struct CatalogDetailView: View {
     }
 }
 
-// MARK: - Workout header: Start button, then progress bar + timer
-// Before you start: one big "Start workout" button, no progress bar.
-// Once started: a thick bar shows "2 of 6" and the time, with Pause/Resume and Stop beside it.
-// Stop asks first, then freezes the bar at your finishing time. Long-press the bar to start over.
+// MARK: - Workout header: the big ring, the title, then the buttons
+// The ring shows today's sets ("6/15"); while resting it counts the rest down (tap it, or Skip, to end rest).
+// Under the title: the focus and the workout time ("Lower body + core · 18:42"), or "7 of 15 sets · 18:42"
+// while resting. Before you start: ▶ and the dumbbell. Once started: pause, stop and the dumbbell.
+// Stop asks first, then freezes the time. Long-press the ring to start the timer over.
 // The timer is saved, so it keeps going if you leave the app, and everything resets on a new day.
 
 private struct WorkoutHeader: View {
     let title: String            // "Workout A · Lower body"
-    let done: Int
+    let done: Int                // exercises done
     let total: Int
+    let setsDone: Int
+    let setsTotal: Int
+    let restEnd: Date?           // resting until then; nil = not resting
+    let restTotal: Double
+    let skipRest: () -> Void
     let showWorkouts: () -> Void // the dumbbell button: Your workouts
     let startOver: () -> Void    // ▶ after ending: clear today's sets for this workout
     @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32   // a bit larger than .title (28)
 
-    init(title: String, done: Int, total: Int,
+    init(title: String, done: Int, total: Int, setsDone: Int, setsTotal: Int,
+         restEnd: Date?, restTotal: Double, skipRest: @escaping () -> Void,
          showWorkouts: @escaping () -> Void, startOver: @escaping () -> Void) {
         self.title = title
         self.done = done
         self.total = total
+        self.setsDone = setsDone
+        self.setsTotal = setsTotal
+        self.restEnd = restEnd
+        self.restTotal = restTotal
+        self.skipRest = skipRest
         self.showWorkouts = showWorkouts
         self.startOver = startOver
     }
@@ -1249,9 +1361,8 @@ private struct WorkoutHeader: View {
     @State private var confirmingStop = false
 
     private var running: Bool { startedAt > 0 }
+    private var resting: Bool { restEnd != nil }
 
-    private static let sage     = Color(red: 0.478, green: 0.545, blue: 0.455) // #7A8B74
-    private static let sageFill = Color(red: 0.788, green: 0.820, blue: 0.773) // #C9D1C5
     private static let track    = Color(red: 0.906, green: 0.898, blue: 0.894) // #E7E5E4
     private static let stone    = Color(red: 0.267, green: 0.251, blue: 0.235) // #44403C
 
@@ -1259,10 +1370,11 @@ private struct WorkoutHeader: View {
     private var inProgress: Bool { !finished && (started || running || elapsed > 0) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             titleLine
-            belowTitle
+            buttonRow
         }
+        .padding(.top, 8)
         .onAppear(perform: newDayCheck)
         .confirmationDialog("End this workout?", isPresented: $confirmingStop, titleVisibility: .visible) {
             Button("End workout", role: .destructive, action: stop)
@@ -1271,15 +1383,33 @@ private struct WorkoutHeader: View {
         }
     }
 
-    // "Workout A" with "Lower body" underneath; ▶ Start and the dumbbell at the end of the line.
+    // [ring]  Workout A                 [Skip]
+    //         Lower body + core · 18:42
     private var titleLine: some View {
-        HStack(alignment: .center, spacing: 8) {
+        HStack(alignment: .center, spacing: 14) {
+            HeaderRing(setsDone: setsDone, setsTotal: setsTotal,
+                       restEnd: restEnd, restTotal: restTotal, skip: skipRest)
+                .contextMenu {
+                    if inProgress || finished {
+                        Button("Start timer over", systemImage: "arrow.counterclockwise", role: .destructive, action: reset)
+                    }
+                }
             titleTexts
             Spacer(minLength: 0)
-            startButton
-            roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
+            if resting {
+                Button(action: skipRest) {
+                    Text("Skip")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 64, height: 30)
+                        .background(Capsule().fill(Tone.ink))
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Skip rest")
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
         }
-        .padding(.top, 8)
+        .animation(.easeInOut(duration: 0.3), value: resting)
     }
 
     private var titleParts: [String] { title.components(separatedBy: " · ") }
@@ -1290,26 +1420,45 @@ private struct WorkoutHeader: View {
                 .font(.system(size: titleSize, weight: .bold))
                 .foregroundStyle(Tone.ink)
                 .lineLimit(1)
-            focusText
+                .minimumScaleFactor(0.7)
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                Text(subtitle(at: ctx.date))
+                    .font(.subheadline.weight(allDoneAndStopped ? .semibold : .regular))
+                    .monospacedDigit()
+                    .foregroundStyle(allDoneAndStopped ? Tone.check : Color.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
     }
 
-    @ViewBuilder
-    private var focusText: some View {
-        if titleParts.count > 1 {
-            Text(titleParts.dropFirst().joined(separator: " · "))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
+    private var allDoneAndStopped: Bool { finished && total > 0 && done >= total }
+
+    private func subtitle(at date: Date) -> String {
+        let time = format(totalTime(at: date))
+        if allDoneAndStopped { return "Done in \(time)" }
+        if finished { return "Ended · \(time)" }
+        let focus = titleParts.dropFirst().joined(separator: " · ")
+        let first = resting ? "\(setsDone) of \(setsTotal) sets" : focus
+        guard inProgress else { return first }
+        let timeText = running ? time : "Paused · \(time)"
+        return first.isEmpty ? timeText : "\(first) · \(timeText)"
     }
 
-    @ViewBuilder
-    private var startButton: some View {
-        if !inProgress {
-            roundButton("play.fill", label: "Start workout", action: tapStart)
-                .transition(.opacity.combined(with: .scale))
+    // Right-aligned under the title: ▶ (or pause + stop) and the dumbbell.
+    private var buttonRow: some View {
+        HStack(spacing: 8) {
+            Spacer(minLength: 0)
+            if inProgress {
+                roundButton(running ? "pause.fill" : "play.fill",
+                            label: running ? "Pause workout timer" : "Resume workout timer",
+                            action: togglePause)
+                roundButton("stop.fill", label: "Stop workout", action: askStop)
+            } else {
+                roundButton("play.fill", label: "Start workout", action: tapStart)
+                    .transition(.opacity.combined(with: .scale))
+            }
+            roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
         }
     }
 
@@ -1318,39 +1467,7 @@ private struct WorkoutHeader: View {
         start()
     }
 
-    @ViewBuilder
-    private var belowTitle: some View {
-        if inProgress {
-            progressLine
-        } else if finished && total > 0 && done >= total {
-            // Stopped after finishing every exercise.
-            Label("Done in \(format(elapsed))", systemImage: "checkmark")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Tone.check)
-                .padding(.top, 6)
-        }
-    }
-
-    // Running or paused: the bar with the time, then pause/resume and stop.
-    private var progressLine: some View {
-        HStack(spacing: 8) {
-            bar
-            roundButton(running ? "pause.fill" : "play.fill",
-                        label: running ? "Pause workout timer" : "Resume workout timer",
-                        action: togglePause)
-            roundButton("stop.fill", label: "Stop workout", action: askStop)
-        }
-        .padding(.top, 12)
-        .transition(.opacity)
-    }
-
     private func askStop() { confirmingStop = true }
-
-    private var barLabel: String {
-        let count = "\(done) of \(total)"
-        if finished { return "Finished · " + count }
-        return running ? count : "Paused · " + count
-    }
 
     // Grey circle button, the same style for ▶, the dumbbell, pause and stop.
     private func roundButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
@@ -1363,43 +1480,6 @@ private struct WorkoutHeader: View {
         }
         .buttonStyle(.borderless)
         .accessibilityLabel(label)
-    }
-
-    // Thick bar: progress fill, "2 of 6" on the left, the time on the right.
-    private var bar: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Self.track)
-                GeometryReader { geo in
-                    Capsule().fill(Self.sageFill)
-                        .frame(width: fillWidth(geo.size.width))
-                }
-                HStack {
-                    Text(barLabel)
-                        .foregroundStyle(Self.stone)
-                    Spacer()
-                    Text(format(totalTime(at: ctx.date)))
-                        .fontWeight(.semibold)
-                        .monospacedDigit()
-                        .foregroundStyle(running || finished ? Tone.ink : Color.secondary)
-                }
-                .font(.subheadline)
-                .padding(.horizontal, 14)
-            }
-            .frame(height: 36)
-            .animation(.easeOut(duration: 0.3), value: done)
-        }
-        .contentShape(Capsule())
-        .contextMenu {
-            Button("Start over", systemImage: "arrow.counterclockwise", role: .destructive, action: reset)
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private func fillWidth(_ full: CGFloat) -> CGFloat {
-        guard total > 0, done > 0 else { return 0 }
-        let fraction = CGFloat(done) / CGFloat(total)
-        return max(34, full * fraction)
     }
 
     private func totalTime(at date: Date) -> TimeInterval {
@@ -1451,69 +1531,6 @@ private struct WorkoutHeader: View {
         return s >= 3600
             ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
             : String(format: "%d:%02d", s / 60, s % 60)
-    }
-}
-
-// MARK: - Rest timer bar
-
-// A thin countdown line inside the open exercise, right under its name:
-// "Rest  ━━━━━━──  0:52  −10s  +10s". The line empties as the rest runs down.
-// Fixed widths keep the time and buttons from shifting as the numbers change.
-private struct RestLine: View {
-    let end: Date
-    let total: Double
-    let add: () -> Void
-    let subtract: () -> Void
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
-            content(left: max(0, end.timeIntervalSince(ctx.date)))
-        }
-    }
-
-    private func content(left: TimeInterval) -> some View {
-        HStack(spacing: 10) {
-            Text("Rest")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            line(fraction: total > 0 ? left / total : 0)
-            Text(clock(left))
-                .font(.subheadline.weight(.semibold))
-                .monospacedDigit()
-                .frame(width: 40, alignment: .trailing)
-            stepButton("−10s", action: subtract)
-            stepButton("+10s", action: add)
-        }
-        .padding(.vertical, 2)
-    }
-
-    private func line(fraction: Double) -> some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color(.systemGray5))
-                Capsule().fill(Color(.systemGray2))
-                    .frame(width: geo.size.width * CGFloat(fraction))
-                    .animation(.linear(duration: 0.25), value: fraction)
-            }
-        }
-        .frame(height: 4)
-    }
-
-    private func stepButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.footnote.weight(.semibold))
-                .monospacedDigit()
-                .foregroundStyle(Color.primary)
-                .frame(width: 46, height: 26)
-                .background(Capsule().fill(Color(.systemGray5)))
-        }
-        .buttonStyle(.borderless)
-    }
-
-    private func clock(_ t: TimeInterval) -> String {
-        let secs = Int(t.rounded(.up))
-        return String(format: "%d:%02d", secs / 60, secs % 60)
     }
 }
 
