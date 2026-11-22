@@ -1911,69 +1911,7 @@ private struct WorkoutPreview: View {
 }
 
 // MARK: - How-to page
-
-struct ExerciseHowToView: View {
-    let exercise: ExerciseTemplate
-
-    var body: some View {
-        Form {
-            if let file = ExerciseCatalog.videoFile(for: exercise.id) {
-                Section { ExerciseVideoView(file: file) }
-            }
-            if let info = ExerciseLibrary.info(for: exercise.id) {
-                if ExerciseCatalog.videoFile(for: exercise.id) == nil {
-                    Section { HowToCarousel(info: info) }   // no video for this one (hip thrust)
-                } else {
-                    Section("How to") {
-                        ForEach(Array(info.steps.enumerated()), id: \.offset) { i, step in
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                                Text("\(i + 1)").font(.subheadline.bold()).monospacedDigit()
-                                Text(step)
-                            }
-                        }
-                        Text("Avoid: \(info.avoid)").font(.footnote).foregroundStyle(.secondary)
-                    }
-                    Section("Muscles") {
-                        Text(info.muscles.joined(separator: " · "))
-                    }
-                }
-            } else if let c = ExerciseCatalog.exercise(id: exercise.id) {
-                Section("How to") {
-                    ForEach(Array(c.steps.enumerated()), id: \.offset) { i, step in
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text("\(i + 1)").font(.subheadline.bold()).monospacedDigit()
-                            Text(step)
-                        }
-                    }
-                    if let avoid = c.avoid {
-                        Text("Avoid: \(avoid)").font(.footnote).foregroundStyle(.secondary)
-                    }
-                }
-                Section("Muscles") {
-                    LabeledContent("Main", value: c.target.capitalized)
-                    LabeledContent("Equipment", value: c.equipment.capitalized)
-                }
-            }
-            Section("Plan") {
-                Text("\(exercise.sets) × \(exercise.reps)")
-                if let partners = supersetPartners {
-                    Label("Superset with \(partners)", systemImage: "arrow.triangle.2.circlepath")
-                }
-            }
-        }
-        .navigationTitle(exercise.name)
-    }
-
-    // "Push-ups" — the other exercises in this one's superset, or nil if it isn't in one.
-    private var supersetPartners: String? {
-        guard exercise.superset != nil,
-              let w = PlanTemplate.phase1.first(where: { $0.exercises.contains(exercise) }) else { return nil }
-        let names = PlanTemplate.supersetGroup(of: exercise, in: w)
-            .filter { $0.id != exercise.id }
-            .map(\.name)
-        return names.isEmpty ? nil : names.joined(separator: " and ")
-    }
-}
+// ExerciseHowToView lives in HowToPage.swift.
 
 // Timed exercises (plank, side plank): the plan's reps are in seconds ("30–40 s", "20–30 s / side").
 // They have no weight; the number logged is seconds.
