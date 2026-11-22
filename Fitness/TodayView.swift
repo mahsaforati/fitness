@@ -81,8 +81,12 @@ struct TodayView: View {
 
     private func openWorkouts() { showingWorkouts = true }
 
-    // Skip: tap the ring (or the Skip button) while resting.
-    private func skipRest() { withAnimation(.easeOut(duration: 0.3)) { restEnd = nil } }
+    // Skip: tap the ring (or the Skip button) while resting. Instant: no fade, the ring jumps straight back to the sets.
+    private func skipRest() {
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { restEnd = nil }
+    }
 
     private func headerSection(done: Int, total: Int, setsDone: Int, setsTotal: Int) -> some View {
         let header = WorkoutHeader(title: workout.displayTitle, done: done, total: total,
@@ -1058,7 +1062,7 @@ private struct HeaderRing: View {
         .onTapGesture { if restEnd != nil { skip() } }
         .accessibilityElement(children: .combine)
         .accessibilityAction(named: "Skip rest") { if restEnd != nil { skip() } }
-        .animation(.easeInOut(duration: 0.35), value: restEnd == nil)
+        .animation(.easeOut(duration: 0.15), value: restEnd == nil)
     }
 
     private func ring<C: View>(fraction: Double, color: Color, @ViewBuilder center: () -> C) -> some View {
@@ -1446,7 +1450,7 @@ private struct WorkoutHeader: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Skip rest")
-                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))   // appears softly, goes at once
             }
             Spacer(minLength: 0)
             if inProgress {
@@ -1460,7 +1464,7 @@ private struct WorkoutHeader: View {
             }
             roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
         }
-        .animation(.easeInOut(duration: 0.3), value: resting)
+        .animation(.easeOut(duration: 0.15), value: resting)
     }
 
     private func tapStart() {
