@@ -1020,66 +1020,172 @@ private struct SetRing: View {
 }
 
 // MARK: - Workout ring (header)
-// Shows "6/15" with a light sage ring for the sets done today. While resting it turns dark and
-// counts the rest down ("Rest 0:52"), then goes back to the sets. Tap it while resting to skip.
+// Before you start: a big white Start button (green border, green ▶) where the ring goes.
+// Once started: the ring fills light sage with today's sets, "6/15" with the workout time under it.
+// Tap the ring to pause: it shows a green ▶ and the stopped time (tap again to resume).
+// While resting it turns dark and counts the rest down; a tap then skips the rest.
+// After ending: a full sage ring with "Done in 32:10".
+private enum WorkoutPhase { case notStarted, running, paused, finished }
+
 private struct HeaderRing: View {
+    let phase: WorkoutPhase
     let setsDone: Int
     let setsTotal: Int
     let restEnd: Date?
     let restTotal: Double
-    let skip: () -> Void
+    let workoutTime: (Date) -> TimeInterval
+    let start: () -> Void
+    let togglePause: () -> Void
+    let skipRest: () -> Void
 
     static let sageFill = Color(red: 0.788, green: 0.820, blue: 0.773) // #C9D1C5
+    private let size: CGFloat = 92
+    private let line: CGFloat = 9
 
-    private var allDone: Bool { setsTotal > 0 && setsDone >= setsTotal }
+    private var resting: Bool { restEnd != nil && phase == .running }
 
     var body: some View {
         Group {
-            if let end = restEnd {
-                TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
-                    let left = max(0, end.timeIntervalSince(ctx.date))
-                    ring(fraction: restTotal > 0 ? left / restTotal : 0, color: Tone.ink) {
-                        VStack(spacing: 0) {
-                            Text("Rest").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                            Text(clock(left)).font(.system(size: 16, weight: .bold)).monospacedDigit()
-                        }
-                    }
-                    .accessibilityLabel("Rest, \(Int(left.rounded(.up))) seconds left")
-                }
+            if phase == .notStarted {
+                startButton
             } else {
-                ring(fraction: setsTotal > 0 ? Double(setsDone) / Double(setsTotal) : 0,
-                     color: allDone ? Tone.ring : Self.sageFill) {
-                    Text("\(setsDone)/\(setsTotal)")
-                        .font(.system(size: setsTotal >= 100 ? 12 : 15, weight: .bold))
-                        .monospacedDigit()
-                        .minimumScaleFactor(0.7)
-                }
-                .accessibilityLabel("\(setsDone) of \(setsTotal) sets done")
+                ring
             }
         }
-        .foregroundStyle(Tone.ink)
-        .contentShape(Circle())
-        .onTapGesture { if restEnd != nil { skip() } }
-        .accessibilityElement(children: .combine)
-        .accessibilityAction(named: "Skip rest") { if restEnd != nil { skip() } }
-        .animation(.easeOut(duration: 0.15), value: restEnd == nil)
+        .animation(.easeInOut(duration: 0.25), value: phase)
     }
 
-    private func ring<C: View>(fraction: Double, color: Color, @ViewBuilder center: () -> C) -> some View {
-        ZStack {
-            Circle().stroke(Tone.ringTrack, lineWidth: 8)
-            Circle()
-                .trim(from: 0, to: CGFloat(min(1, max(0, fraction))))
-                .stroke(color, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .animation(.linear(duration: 0.25), value: fraction)
-            center()
+    private var startButton: some View {
+        Button(action: start) {
+            ZStack {
+                Circle().fill(Color.white)
+                Circle().strokeBorder(Tone.ring, lineWidth: 3)
+                Image(systemName: "play.fill")
+                    .font(.system(size: 36, weight: .bold))
+                    .foregroundStyle(Tone.ring)
+                    .offset(x: 3)   // a triangle looks centred a little to the right
+            }
+            .frame(width: size, height: size)
+            .contentShape(Circle())
         }
-        .padding(4)
-        .frame(width: 64, height: 64)
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Start workout")
+        .transition(.opacity.combined(with: .scale(scale: 0.92)))
     }
 
+    private var ring: some View {
+        TimelineView(.periodic(from: .now, by: 0.25)) { ctx in
+            let time = workoutTime(ctx.date)
+            let left = restEnd.map { max(0, $0.timeIntervalSince(ctx.date)) } ?? 0
+            let fill = fraction(left: left)
+            ZStack {
+                Circle().stroke(Tone.ringTrack, lineWidth: line)
+                Circle()
+                    .trim(from: 0, to: fill)
+                    .stroke(stroke, style: StrokeStyle(lineWidth: line, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 0.25), value: fill)
+                center(time: time, left: left)
+            }
+            .padding(line / 2)
+            .frame(width: size, height: size)
+            .contentShape(Circle())
+            .onTapGesture(perform: tap)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label(time: time, left: left))
+            .accessibilityAddTraits(phase == .finished ? [] : .isButton)
+        }
+        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+    }
+
+    private func fraction(left: TimeInterval) -> CGFloat {
+        if phase == .finished { return 1 }
+        if resting { return restTotal > 0 ? CGFloat(min(1, left / restTotal)) : 0 }
+        return setsTotal > 0 ? CGFloat(min(1, Double(setsDone) / Double(setsTotal))) : 0
+    }
+
+    private var stroke: Color {
+        if phase == .finished || (setsTotal > 0 && setsDone >= setsTotal && !resting) { return Tone.ring }
+        return resting ? Tone.ink : Self.sageFill
+    }
+
+    @ViewBuilder
+    private func center(time: TimeInterval, left: TimeInterval) -> some View {
+        switch phase {
+        case .paused:
+            VStack(spacing: 2) {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(Tone.ring)
+                    .offset(x: 2)
+                small(clock(time))
+            }
+        case .finished:
+            VStack(spacing: 1) {
+                Text("Done in").font(.system(size: 11, weight: .bold)).foregroundStyle(Tone.doneText)
+                big(clock(time), size: 16)
+            }
+        default:
+            if resting {
+                VStack(spacing: 1) {
+                    Text("Rest").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                    big(restClock(left), size: 18)
+                }
+            } else {
+                VStack(spacing: 1) {
+                    big("\(setsDone)/\(setsTotal)", size: setsTotal >= 100 ? 15 : 18)
+                    small(clock(time))
+                }
+            }
+        }
+    }
+
+    private func big(_ text: String, size: CGFloat) -> some View {
+        Text(text)
+            .font(.system(size: size, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(Tone.ink)
+            .minimumScaleFactor(0.7)
+            .lineLimit(1)
+    }
+
+    private func small(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
+
+    // Paused → resume. Resting → skip the rest. Running → pause.
+    private func tap() {
+        switch phase {
+        case .paused: togglePause()
+        case .running: if resting { skipRest() } else { togglePause() }
+        default: break
+        }
+    }
+
+    private func label(time: TimeInterval, left: TimeInterval) -> String {
+        switch phase {
+        case .paused: return "Workout paused at \(clock(time)). Tap to resume"
+        case .finished: return "Done in \(clock(time))"
+        default:
+            if resting { return "Rest, \(Int(left.rounded(.up))) seconds left. Tap to skip" }
+            return "\(setsDone) of \(setsTotal) sets, workout time \(clock(time)). Tap to pause"
+        }
+    }
+
+    // "4:05", or "1:02:09" past an hour
     private func clock(_ t: TimeInterval) -> String {
+        let s = Int(t)
+        return s >= 3600
+            ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+            : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    private func restClock(_ t: TimeInterval) -> String {
         let secs = Int(t.rounded(.up))
         return String(format: "%d:%02d", secs / 60, secs % 60)
     }
@@ -1322,11 +1428,12 @@ struct CatalogDetailView: View {
     }
 }
 
-// MARK: - Workout header: the big ring, the title, then the buttons
-// The ring shows today's sets ("6/15"); while resting it counts the rest down (tap it, or Skip under it, to end rest).
-// Under the title: the focus and the workout time ("Lower body + core · 18:42"), or "7 of 15 sets · 18:42"
-// while resting. Before you start: ▶ and the dumbbell. Once started: pause, stop and the dumbbell.
-// Stop asks first, then freezes the time. Long-press the ring to start the timer over.
+// MARK: - Workout header: the ring (or Start), the title, then what you can do now
+// [Start / ring]  Workout A           [dumbbell]
+//                 Lower body + core
+// Under it, depending on the moment:
+//   running → "Tap the ring to pause"   paused → [▶ Resume] [■ End workout]   resting → [Skip]
+// End asks first, then freezes the time. Long-press the ring to reset the timer or do the workout again.
 // The timer is saved, so it keeps going if you leave the app, and everything resets on a new day.
 
 private struct WorkoutHeader: View {
@@ -1339,7 +1446,7 @@ private struct WorkoutHeader: View {
     let restTotal: Double
     let skipRest: () -> Void
     let showWorkouts: () -> Void // the dumbbell button: Your workouts
-    let startOver: () -> Void    // ▶ after ending: clear today's sets for this workout
+    let startOver: () -> Void    // clear today's sets for this workout
     @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32   // a bit larger than .title (28)
 
     init(title: String, done: Int, total: Int, setsDone: Int, setsTotal: Int,
@@ -1361,24 +1468,32 @@ private struct WorkoutHeader: View {
     @AppStorage("workoutTimerElapsed") private var elapsed = 0.0      // seconds banked before the last start
     @AppStorage("workoutTimerDay") private var day = ""               // day the timer belongs to
     @AppStorage("workoutTimerStarted") private var started = false    // pressed Start today
-    @AppStorage("workoutTimerFinished") private var finished = false  // pressed Stop today
+    @AppStorage("workoutTimerFinished") private var finished = false  // pressed End today
     @State private var confirmingStop = false
 
     private var running: Bool { startedAt > 0 }
-    private var resting: Bool { restEnd != nil }
+    private var resting: Bool { restEnd != nil && phase == .running }
 
     private static let track    = Color(red: 0.906, green: 0.898, blue: 0.894) // #E7E5E4
     private static let stone    = Color(red: 0.267, green: 0.251, blue: 0.235) // #44403C
 
-    // In progress = started and not stopped yet (also covers a timer started before this update).
+    // In progress = started and not ended yet (also covers a timer started before this update).
     private var inProgress: Bool { !finished && (started || running || elapsed > 0) }
 
+    private var phase: WorkoutPhase {
+        if finished { return .finished }
+        if inProgress { return running ? .running : .paused }
+        return .notStarted
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 10) {
             titleLine
-            buttonRow
+            actionRow
         }
         .padding(.top, 8)
+        .animation(.easeOut(duration: 0.2), value: phase)
+        .animation(.easeOut(duration: 0.15), value: resting)
         .onAppear(perform: newDayCheck)
         .confirmationDialog("End this workout?", isPresented: $confirmingStop, titleVisibility: .visible) {
             Button("End workout", role: .destructive, action: stop)
@@ -1387,20 +1502,26 @@ private struct WorkoutHeader: View {
         }
     }
 
-    // [ring]  Workout A
-    //         Lower body + core · 18:42
-    // [Skip]                     ⏸ ⏹ 🏋  (Skip only while resting, right under the ring)
     private var titleLine: some View {
         HStack(alignment: .center, spacing: 14) {
-            HeaderRing(setsDone: setsDone, setsTotal: setsTotal,
-                       restEnd: restEnd, restTotal: restTotal, skip: skipRest)
+            HeaderRing(phase: phase, setsDone: setsDone, setsTotal: setsTotal,
+                       restEnd: restEnd, restTotal: restTotal,
+                       workoutTime: totalTime(at:), start: start,
+                       togglePause: togglePause, skipRest: skipRest)
                 .contextMenu {
-                    if inProgress || finished {
-                        Button("Start timer over", systemImage: "arrow.counterclockwise", role: .destructive, action: reset)
+                    if inProgress {
+                        Button("Reset timer", systemImage: "arrow.counterclockwise", role: .destructive, action: reset)
+                    }
+                    if finished {
+                        Button("Do this workout again", systemImage: "arrow.counterclockwise", role: .destructive) {
+                            startOver()
+                            reset()
+                        }
                     }
                 }
             titleTexts
             Spacer(minLength: 0)
+            roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
         }
     }
 
@@ -1415,66 +1536,73 @@ private struct WorkoutHeader: View {
                 .minimumScaleFactor(0.7)
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(subtitle(at: ctx.date))
-                    .font(.subheadline.weight(allDoneAndStopped ? .semibold : .regular))
+                    .font(.subheadline)
                     .monospacedDigit()
-                    .foregroundStyle(allDoneAndStopped ? Tone.check : Color.secondary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
         }
     }
 
-    private var allDoneAndStopped: Bool { finished && total > 0 && done >= total }
-
+    // The focus ("Lower body + core"). While resting the ring shows the rest, so the sets and time move here.
     private func subtitle(at date: Date) -> String {
-        let time = format(totalTime(at: date))
-        if allDoneAndStopped { return "Done in \(time)" }
-        if finished { return "Ended · \(time)" }
-        let focus = titleParts.dropFirst().joined(separator: " · ")
-        let first = resting ? "\(setsDone) of \(setsTotal) sets" : focus
-        guard inProgress else { return first }
-        let timeText = running ? time : "Paused · \(time)"
-        return first.isEmpty ? timeText : "\(first) · \(timeText)"
+        if resting { return "\(setsDone) of \(setsTotal) sets · \(format(totalTime(at: date)))" }
+        return titleParts.dropFirst().joined(separator: " · ")
     }
 
-    // Skip under the ring while resting; ▶ (or pause + stop) and the dumbbell on the right.
-    private var buttonRow: some View {
-        HStack(spacing: 8) {
+    @ViewBuilder
+    private var actionRow: some View {
+        switch phase {
+        case .paused:
+            HStack(spacing: 8) {
+                Button(action: togglePause) {
+                    Label("Resume", systemImage: "play.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Tone.doneText)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .background(Capsule().fill(Color.white))
+                        .overlay(Capsule().strokeBorder(Tone.ring, lineWidth: 2))
+                }
+                .buttonStyle(.borderless)
+                Button(action: askStop) {
+                    Label("End workout", systemImage: "stop.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Self.stone)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .background(Capsule().fill(Self.track))
+                }
+                .buttonStyle(.borderless)
+            }
+            .transition(.opacity)
+        case .running:
             if resting {
                 Button(action: skipRest) {
                     Text("Skip")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 64, height: 30)   // same width as the ring, so it sits right under it
+                        .frame(width: 92, height: 30)   // the ring's width, so it sits right under it
                         .background(Capsule().fill(Tone.ink))
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Skip rest")
-                .transition(.asymmetric(insertion: .opacity, removal: .identity))   // appears softly, goes at once
-            }
-            Spacer(minLength: 0)
-            if inProgress {
-                roundButton(running ? "pause.fill" : "play.fill",
-                            label: running ? "Pause workout timer" : "Resume workout timer",
-                            action: togglePause)
-                roundButton("stop.fill", label: "Stop workout", action: askStop)
+                .transition(.asymmetric(insertion: .opacity, removal: .identity))
             } else {
-                roundButton("play.fill", label: "Start workout", action: tapStart)
-                    .transition(.opacity.combined(with: .scale))
+                Text("Tap the ring to pause")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
-            roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
+        default:
+            EmptyView()
         }
-        .animation(.easeOut(duration: 0.15), value: resting)
-    }
-
-    private func tapStart() {
-        if finished { startOver() }   // after ending: back to the original state, no question
-        start()
     }
 
     private func askStop() { confirmingStop = true }
 
-    // Grey circle button, the same style for ▶, the dumbbell, pause and stop.
+    // Grey circle button (the dumbbell).
     private func roundButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
