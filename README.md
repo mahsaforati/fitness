@@ -16,7 +16,13 @@ iOS app (SwiftUI + SwiftData) for logging weights and reps against a 6-month hom
 - Weights stored in kg, shown in **lb by default**; switch units in Settings (⚙︎ top right of the Plan tab)
 - **Calendar**: month grid in the Figma style; days with logged sets show A/B/C, tap a day to see its sets and volume
 - **How page** (tap How on an exercise): a full-width 4:5 looping video with the exercise name over it, round Back and Pause buttons on the video, Steps / Muscles / Avoid tabs, and the plan (sets × reps, superset partner) in a bar at the bottom. The video is silent and doesn't stop your music. For now every exercise shows the same placeholder clip (`Fitness/HowToPlaceholder.mp4`) until the new animations are ready; swap them in via `HowToVideo.url(for:)` in `HowToPage.swift`.
-  - **Video spec for new animations:** 4:5 portrait, 1440 × 1800 px (1080 × 1350 minimum), 30 fps, seamless loop, flat or transparent background; keep the figure out of the top ~220 px, bottom ~310 px and ~75 px at each side
+  - **Video spec for new animations** (optimal size: sharp on every iPhone, small enough to ship):
+    - 4:5 portrait, **1080 × 1350 px**
+    - **30 fps**, one rep (**~4 s**) as a seamless loop
+    - MP4, **HEVC (H.265) at ~1.2 Mbps**, no audio track
+    - Plain, flat background (or transparent)
+    - Keep the figure out of the top ~165 px (buttons), bottom ~235 px (exercise name) and ~55 px at each side
+    - Each file should come out at **~0.5–0.7 MB**. Bundle only the plan's videos (~17, ~12 MB); the rest of the list (1,324) downloads on first view
 
 ## Run it
 Option A — XcodeGen (recommended):
