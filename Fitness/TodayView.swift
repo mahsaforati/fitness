@@ -1319,7 +1319,7 @@ struct CatalogDetailView: View {
 }
 
 // MARK: - Workout header: the big ring, the title, then the buttons
-// The ring shows today's sets ("6/15"); while resting it counts the rest down (tap it, or Skip, to end rest).
+// The ring shows today's sets ("6/15"); while resting it counts the rest down (tap it, or Skip under it, to end rest).
 // Under the title: the focus and the workout time ("Lower body + core · 18:42"), or "7 of 15 sets · 18:42"
 // while resting. Before you start: ▶ and the dumbbell. Once started: pause, stop and the dumbbell.
 // Stop asks first, then freezes the time. Long-press the ring to start the timer over.
@@ -1383,8 +1383,9 @@ private struct WorkoutHeader: View {
         }
     }
 
-    // [ring]  Workout A                 [Skip]
+    // [ring]  Workout A
     //         Lower body + core · 18:42
+    // [Skip]                     ⏸ ⏹ 🏋  (Skip only while resting, right under the ring)
     private var titleLine: some View {
         HStack(alignment: .center, spacing: 14) {
             HeaderRing(setsDone: setsDone, setsTotal: setsTotal,
@@ -1396,20 +1397,7 @@ private struct WorkoutHeader: View {
                 }
             titleTexts
             Spacer(minLength: 0)
-            if resting {
-                Button(action: skipRest) {
-                    Text("Skip")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 64, height: 30)
-                        .background(Capsule().fill(Tone.ink))
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel("Skip rest")
-                .transition(.opacity.combined(with: .scale(scale: 0.9)))
-            }
         }
-        .animation(.easeInOut(duration: 0.3), value: resting)
     }
 
     private var titleParts: [String] { title.components(separatedBy: " · ") }
@@ -1445,9 +1433,21 @@ private struct WorkoutHeader: View {
         return first.isEmpty ? timeText : "\(first) · \(timeText)"
     }
 
-    // Right-aligned under the title: ▶ (or pause + stop) and the dumbbell.
+    // Skip under the ring while resting; ▶ (or pause + stop) and the dumbbell on the right.
     private var buttonRow: some View {
         HStack(spacing: 8) {
+            if resting {
+                Button(action: skipRest) {
+                    Text("Skip")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 64, height: 30)   // same width as the ring, so it sits right under it
+                        .background(Capsule().fill(Tone.ink))
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Skip rest")
+                .transition(.opacity.combined(with: .scale(scale: 0.9)))
+            }
             Spacer(minLength: 0)
             if inProgress {
                 roundButton(running ? "pause.fill" : "play.fill",
@@ -1460,6 +1460,7 @@ private struct WorkoutHeader: View {
             }
             roundButton("dumbbell.fill", label: "Your workouts", action: showWorkouts)
         }
+        .animation(.easeInOut(duration: 0.3), value: resting)
     }
 
     private func tapStart() {
