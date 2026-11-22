@@ -12,7 +12,7 @@ import UIKit
 // (exercise name) and ~75 px at each side.
 //
 // Until those are done, every exercise shows the same placeholder clip (HowToPlaceholder.mp4, a 9:16 squat).
-// It's fitted to the height of the 4:5 frame, with a matching sage gradient filling the sides.
+// It's fitted to the height of the 4:5 frame; the sides are filled with a blurred copy of the same video.
 
 enum HowToVideo {
     // Placeholder for every exercise until the new animations are finished.
@@ -21,8 +21,7 @@ enum HowToVideo {
     // The video for an exercise. Swap this for a per-exercise lookup once the new videos exist.
     static func url(for exerciseID: String) -> URL? { placeholderURL }
 
-    // Fills the frame behind the video. Matches the placeholder's own background (dark sage at the top,
-    // lighter at the floor). With the new flat-background videos, change this to their colour.
+    // Shown behind the video while it loads (and if a video file is missing).
     static let backdrop = LinearGradient(
         colors: [Color(red: 0.298, green: 0.369, blue: 0.310),    // #4C5E4F
                  Color(red: 0.451, green: 0.549, blue: 0.486),    // #738C7C
@@ -298,14 +297,46 @@ private struct ChipFlow: Layout {
 
 // MARK: - Looping video
 
-// Plays a video on a silent loop, fitted inside its frame. Doesn't stop music you have playing.
+// Plays a video on a silent loop, fitted inside its frame with a blurred fill behind it.
+// Doesn't stop music you have playing.
 struct LoopingVideoView: UIViewRepresentable {
     let url: URL
     var playing: Bool
 
+    // The video fitted in the middle, over a blurred, zoomed-in copy of the same video that fills
+    // the rest of the frame. A narrower clip (like the 9:16 placeholder) then has no visible edges:
+    // the sides are its own background, blurred. Both layers share one player, so they stay in sync.
     final class PlayerView: UIView {
-        override class var layerClass: AnyClass { AVPlayerLayer.self }
-        var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
+        let fillLayer = AVPlayerLayer()
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .regular))
+        let videoLayer = AVPlayerLayer()
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            clipsToBounds = true
+            fillLayer.videoGravity = .resizeAspectFill
+            videoLayer.videoGravity = .resizeAspect
+            layer.addSublayer(fillLayer)
+            addSubview(blur)
+            layer.addSublayer(videoLayer)   // added last, so it sits above the blur
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        func attach(_ player: AVPlayer) {
+            fillLayer.player = player
+            videoLayer.player = player
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            fillLayer.frame = bounds.insetBy(dx: -20, dy: -20)   // a little bigger, so the blur has no soft edge
+            blur.frame = bounds
+            videoLayer.frame = bounds
+            CATransaction.commit()
+        }
     }
 
     final class Coordinator {
@@ -327,8 +358,7 @@ struct LoopingVideoView: UIViewRepresentable {
 
         let view = PlayerView()
         view.backgroundColor = .clear
-        view.playerLayer.videoGravity = .resizeAspect
-        view.playerLayer.player = player
+        view.attach(player)
         if playing { player.play() }
         return view
     }
