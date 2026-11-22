@@ -7,9 +7,9 @@ import UIKit
 // A full-width 4:5 video at the top with the exercise name over it, round Back and Pause buttons
 // floating over the video, then Steps / Muscles / Avoid tabs, and the plan in a bar at the bottom.
 //
-// Video spec for the animator: 4:5 portrait, 1440 × 1800 px (1080 × 1350 minimum), 30 fps, seamless loop,
-// flat background (or transparent). Keep the figure out of the top ~220 px (buttons), the bottom ~310 px
-// (exercise name) and ~75 px at each side.
+// Video spec for the animator: 4:5 portrait, 1080 × 1350 px, 30 fps, one rep (~4 s) as a seamless loop,
+// MP4 in HEVC (H.265) at ~1.2 Mbps, no audio, plain flat background (or transparent) → ~0.5–0.7 MB each.
+// Keep the figure out of the top ~165 px (buttons), the bottom ~235 px (exercise name) and ~55 px at each side.
 //
 // Until those are done, every exercise shows the same placeholder clip (HowToPlaceholder.mp4, a 9:16 squat).
 // It's fitted to the height of the 4:5 frame; the sides are filled with a blurred copy of the same video.
