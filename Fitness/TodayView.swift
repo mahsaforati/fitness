@@ -1432,8 +1432,8 @@ struct CatalogDetailView: View {
 // [Start / ring]  Workout A           [dumbbell]
 //                 Lower body + core
 // Under it, depending on the moment:
-//   running → "Tap the ring to pause"   paused → [▶ Resume] [■ End workout]   resting → [Skip]
-// End asks first, then freezes the time. Long-press the ring to reset the timer or do the workout again.
+//   paused → [▶ Resume] [■ End workout]   resting → [Skip]   (nothing while just running)
+// End asks first, then freezes the time. Finishing the last exercise ends the workout by itself. Long-press the ring to reset the timer or do the workout again.
 // The timer is saved, so it keeps going if you leave the app, and everything resets on a new day.
 
 private struct WorkoutHeader: View {
@@ -1495,6 +1495,7 @@ private struct WorkoutHeader: View {
         .animation(.easeOut(duration: 0.2), value: phase)
         .animation(.easeOut(duration: 0.15), value: resting)
         .onAppear(perform: newDayCheck)
+        .onChange(of: done) { endIfAllDone() }
         .confirmationDialog("End this workout?", isPresented: $confirmingStop, titleVisibility: .visible) {
             Button("End workout", role: .destructive, action: stop)
         } message: {
@@ -1589,11 +1590,6 @@ private struct WorkoutHeader: View {
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Skip rest")
                 .transition(.asymmetric(insertion: .opacity, removal: .identity))
-            } else {
-                Text("Tap the ring to pause")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .transition(.opacity)
             }
         default:
             EmptyView()
@@ -1601,6 +1597,13 @@ private struct WorkoutHeader: View {
     }
 
     private func askStop() { confirmingStop = true }
+
+    // Every exercise done: stop the timer and end the workout (no question), and drop any rest.
+    private func endIfAllDone() {
+        guard total > 0, done >= total, inProgress else { return }
+        skipRest()
+        withAnimation(.easeInOut(duration: 0.4)) { stop() }
+    }
 
     // Grey circle button (the dumbbell).
     private func roundButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
