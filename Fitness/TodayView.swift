@@ -32,6 +32,7 @@ struct TodayView: View {
     @State private var confirmingReset = false
     @State private var showingWorkouts = false
     @State private var justFinished: String?   // exercise held open for a moment before the next one opens
+    @State private var celebration: WorkoutCelebration?   // the "Workout done!" screen, shown when every exercise is done
     // First-set numbers changed with − / + before logging (in the units shown), by exercise ID.
     private struct Draft { var weight: Double; var reps: Int }
     @State private var drafts: [String: Draft] = [:]
@@ -92,7 +93,11 @@ struct TodayView: View {
         let header = WorkoutHeader(title: workout.displayTitle, done: done, total: total,
                                    setsDone: setsDone, setsTotal: setsTotal,
                                    restEnd: restEnd, restTotal: restTotal, skipRest: skipRest,
-                                   showWorkouts: openWorkouts, startOver: clearTodaysSets)
+                                   showWorkouts: openWorkouts, startOver: clearTodaysSets,
+                                   onAllDone: { time in
+                                       celebration = WorkoutCelebration(title: workout.name, focus: workout.focus,
+                                                                        time: time, sets: setsDone, exercises: total)
+                                   })
         return Section {
             header
                 .listRowBackground(Color.clear)
@@ -135,6 +140,9 @@ struct TodayView: View {
             }
             .sheet(isPresented: $showingAdd) {
                 AddExerciseSheet(current: Set(workout.exercises.map(\.id)), onAdd: addExercise)
+            }
+            .fullScreenCover(item: $celebration) { c in
+                CelebrationView(celebration: c) { celebration = nil }   // Done: back to Today, Start is ready again
             }
     }
 
@@ -1024,7 +1032,7 @@ private struct SetRing: View {
 // Once started: the ring fills light sage with today's sets, "6/15" with the workout time under it.
 // Tap the ring to pause: it shows a green ▶ and the stopped time (tap again to resume).
 // While resting it turns dark and counts the rest down; a tap then skips the rest.
-// After ending: a full sage ring with "Done in 32:10".
+// After ending: the Start button again (the finished time shows under the title); Start begins the workout from scratch.
 private enum WorkoutPhase { case notStarted, running, paused, finished }
 
 private struct HeaderRing: View {
@@ -1046,7 +1054,7 @@ private struct HeaderRing: View {
 
     var body: some View {
         Group {
-            if phase == .notStarted {
+            if phase == .notStarted || phase == .finished {   // after ending, Start is ready again
                 startButton
             } else {
                 ring
@@ -1188,6 +1196,140 @@ private struct HeaderRing: View {
     private func restClock(_ t: TimeInterval) -> String {
         let secs = Int(t.rounded(.up))
         return String(format: "%d:%02d", secs / 60, secs % 60)
+    }
+}
+
+// MARK: - Workout done! (shown when every exercise is done)
+// Confetti, a big green ✓, "Workout done!", the time / sets / exercises, and Done back to Today.
+
+struct WorkoutCelebration: Identifiable {
+    let id = UUID()
+    let title: String      // "Workout A"
+    let focus: String      // "Lower body + core"
+    let time: TimeInterval
+    let sets: Int
+    let exercises: Int
+}
+
+private struct CelebrationView: View {
+    let celebration: WorkoutCelebration
+    let done: () -> Void
+    @State private var shown = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.961, green: 0.961, blue: 0.957).ignoresSafeArea()   // #F5F5F4
+            if !reduceMotion { ConfettiView().ignoresSafeArea() }
+            VStack(spacing: 22) {
+                Spacer(minLength: 40)
+                ZStack {
+                    Circle().fill(Tone.ring)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 50, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 108, height: 108)
+                .shadow(color: Tone.ring.opacity(0.3), radius: 15, y: 10)
+                .scaleEffect(shown ? 1 : 0.4)
+                .opacity(shown ? 1 : 0)
+                .accessibilityHidden(true)
+                VStack(spacing: 6) {
+                    Text("Workout done!")
+                        .font(.system(size: 34, weight: .heavy))
+                        .foregroundStyle(Tone.ink)
+                    Text("\(celebration.title) · \(celebration.focus)")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+                .offset(y: shown ? 0 : 16)
+                .opacity(shown ? 1 : 0)
+                HStack(spacing: 8) {
+                    tile(clock(celebration.time), "time")
+                    tile("\(celebration.sets)", "sets")
+                    tile("\(celebration.exercises)", "exercises")
+                }
+                .offset(y: shown ? 0 : 16)
+                .opacity(shown ? 1 : 0)
+                Spacer()
+                Button(action: done) {
+                    Text("Done")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(RoundedRectangle(cornerRadius: 16).fill(Tone.ink))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+        }
+        .onAppear { withAnimation(.spring(response: 0.55, dampingFraction: 0.65)) { shown = true } }
+        .sensoryFeedback(.success, trigger: shown)
+        .gesture(DragGesture().onEnded { if $0.translation.height > 80 { done() } })   // swipe down = Done
+    }
+
+    private func tile(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).font(.system(size: 24, weight: .bold)).monospacedDigit().foregroundStyle(Tone.ink)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            Text(label).font(.footnote).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 14)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color.white))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func clock(_ t: TimeInterval) -> String {
+        let s = Int(t)
+        return s >= 3600
+            ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
+            : String(format: "%d:%02d", s / 60, s % 60)
+    }
+}
+
+// Sage, stone and gold pieces that fall once from the top over a few seconds.
+private struct ConfettiView: View {
+    private struct Piece {
+        let x: Double        // 0…1 across the screen
+        let delay: Double    // seconds before it starts falling
+        let speed: Double    // points per second
+        let size: CGSize
+        let color: Color
+        let spin: Double     // radians per second
+        let round: Bool
+    }
+
+    @State private var pieces: [Piece] = (0..<70).map { _ in
+        let colors: [Color] = [Tone.ring, Color(red: 0.788, green: 0.820, blue: 0.773), Color(red: 0.890, green: 0.910, blue: 0.878),
+                               Color(red: 0.659, green: 0.635, blue: 0.620), Tone.ink, Color(red: 0.839, green: 0.659, blue: 0.361)]
+        return Piece(x: .random(in: 0...1), delay: .random(in: 0...1.6), speed: .random(in: 180...320),
+                     size: CGSize(width: [6, 8, 10].randomElement()!, height: [6, 12, 14].randomElement()!),
+                     color: colors.randomElement()!, spin: .random(in: -6...6), round: Bool.random())
+    }
+    @State private var start = Date()
+
+    var body: some View {
+        TimelineView(.animation) { ctx in
+            Canvas { g, size in
+                let t = ctx.date.timeIntervalSince(start)
+                for p in pieces {
+                    let local = t - p.delay
+                    guard local > 0 else { continue }
+                    let y = local * p.speed - 20
+                    guard y < size.height + 20 else { continue }
+                    var piece = g
+                    piece.translateBy(x: p.x * size.width + sin(local * 2 + p.spin) * 12, y: y)
+                    piece.rotate(by: .radians(local * p.spin))
+                    let rect = CGRect(x: -p.size.width / 2, y: -p.size.height / 2, width: p.size.width, height: p.size.height)
+                    piece.fill(p.round ? Path(ellipseIn: rect) : Path(roundedRect: rect, cornerRadius: 2), with: .color(p.color))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -1433,7 +1575,8 @@ struct CatalogDetailView: View {
 //                 Lower body + core
 // Under it, depending on the moment:
 //   paused → [▶ Resume] [■ End workout]   resting → [Skip]   (nothing while just running)
-// End asks first, then freezes the time. Finishing the last exercise ends the workout by itself. Long-press the ring to reset the timer or do the workout again.
+// End asks first, then freezes the time. Finishing the last exercise ends the workout by itself and shows
+// the "Workout done!" screen. After ending, the Start button is back: it starts the workout from the beginning. Long-press the ring to reset the timer or do the workout again.
 // The timer is saved, so it keeps going if you leave the app, and everything resets on a new day.
 
 private struct WorkoutHeader: View {
@@ -1447,11 +1590,13 @@ private struct WorkoutHeader: View {
     let skipRest: () -> Void
     let showWorkouts: () -> Void // the dumbbell button: Your workouts
     let startOver: () -> Void    // clear today's sets for this workout
+    let onAllDone: (TimeInterval) -> Void   // every exercise done: show the celebration with the workout time
     @ScaledMetric(relativeTo: .title) private var titleSize: CGFloat = 32   // a bit larger than .title (28)
 
     init(title: String, done: Int, total: Int, setsDone: Int, setsTotal: Int,
          restEnd: Date?, restTotal: Double, skipRest: @escaping () -> Void,
-         showWorkouts: @escaping () -> Void, startOver: @escaping () -> Void) {
+         showWorkouts: @escaping () -> Void, startOver: @escaping () -> Void,
+         onAllDone: @escaping (TimeInterval) -> Void) {
         self.title = title
         self.done = done
         self.total = total
@@ -1462,6 +1607,7 @@ private struct WorkoutHeader: View {
         self.skipRest = skipRest
         self.showWorkouts = showWorkouts
         self.startOver = startOver
+        self.onAllDone = onAllDone
     }
 
     @AppStorage("workoutTimerStart") private var startedAt = 0.0      // when it was last started; 0 = not running
@@ -1507,17 +1653,11 @@ private struct WorkoutHeader: View {
         HStack(alignment: .center, spacing: 14) {
             HeaderRing(phase: phase, setsDone: setsDone, setsTotal: setsTotal,
                        restEnd: restEnd, restTotal: restTotal,
-                       workoutTime: totalTime(at:), start: start,
+                       workoutTime: totalTime(at:), start: tapStart,
                        togglePause: togglePause, skipRest: skipRest)
                 .contextMenu {
                     if inProgress {
                         Button("Reset timer", systemImage: "arrow.counterclockwise", role: .destructive, action: reset)
-                    }
-                    if finished {
-                        Button("Do this workout again", systemImage: "arrow.counterclockwise", role: .destructive) {
-                            startOver()
-                            reset()
-                        }
                     }
                 }
             titleTexts
@@ -1549,7 +1689,18 @@ private struct WorkoutHeader: View {
     // The focus ("Lower body + core"). While resting the ring shows the rest, so the sets and time move here.
     private func subtitle(at date: Date) -> String {
         if resting { return "\(setsDone) of \(setsTotal) sets · \(format(totalTime(at: date)))" }
-        return titleParts.dropFirst().joined(separator: " · ")
+        let focus = titleParts.dropFirst().joined(separator: " · ")
+        if finished {
+            let doneIn = "done in \(format(elapsed))"
+            return focus.isEmpty ? "Done in \(format(elapsed))" : "\(focus) · \(doneIn)"
+        }
+        return focus
+    }
+
+    // Start. After an ended workout it starts from the beginning: today's sets for it are cleared first.
+    private func tapStart() {
+        if finished { startOver() }
+        start()
     }
 
     @ViewBuilder
@@ -1603,6 +1754,7 @@ private struct WorkoutHeader: View {
         guard total > 0, done >= total, inProgress else { return }
         skipRest()
         withAnimation(.easeInOut(duration: 0.4)) { stop() }
+        onAllDone(elapsed)
     }
 
     // Grey circle button (the dumbbell).
