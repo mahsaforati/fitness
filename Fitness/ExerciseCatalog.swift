@@ -17,6 +17,7 @@ struct CatalogExercise: Codable, Identifiable, Hashable {
     let target: String      // main muscle, e.g. "glutes"
     let secondary: [String]
     let steps: [String]
+    let avoid: String?      // common mistakes, e.g. "swinging, shrugging." (added by us, not in the dataset)
     let video: String       // GIF file name, e.g. "0001-2gPfomN.gif"
 }
 

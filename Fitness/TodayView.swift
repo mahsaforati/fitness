@@ -1196,6 +1196,9 @@ struct CatalogDetailView: View {
                         Text(step)
                     }
                 }
+                if let avoid = exercise.avoid {
+                    Text("Avoid: \(avoid)").font(.footnote).foregroundStyle(.secondary)
+                }
             }
             Section("Muscles") {
                 LabeledContent("Main", value: exercise.target.capitalized)
@@ -1636,6 +1639,9 @@ struct ExerciseHowToView: View {
                             Text("\(i + 1)").font(.subheadline.bold()).monospacedDigit()
                             Text(step)
                         }
+                    }
+                    if let avoid = c.avoid {
+                        Text("Avoid: \(avoid)").font(.footnote).foregroundStyle(.secondary)
                     }
                 }
                 Section("Muscles") {
