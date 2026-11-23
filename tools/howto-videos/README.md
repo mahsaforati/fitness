@@ -75,6 +75,10 @@ python3 generate.py poses                       # every plan exercise that has n
 python3 generate.py poses --only db-rdl plank   # or just some
 ```
 
+If a lying, seated or bench exercise keeps coming out standing (the model copies the standing
+reference), redo it in two steps: the pose is drawn first without the reference, then given her look:
+`python3 generate.py poses --only db-bench --two-step`
+
 **2. Check the poses**: `open out/review.html`. For each one check:
 - the right start position for the exercise, holding the right equipment
 - **no extra objects** (spare weights, benches she isn't using)

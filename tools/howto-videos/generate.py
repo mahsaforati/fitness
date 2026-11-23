@@ -224,16 +224,22 @@ def retry(what, fn, attempts=3):
             time.sleep(wait)
 
 
-def make_pose(api, ex):
+TWO_STEP_STYLE = """\
+A young woman shown as a realistic anatomy figure for a fitness app: grey skin, the working muscles \
+in red, a dark sports bra and briefs, hair in a ponytail, barefoot, on a plain flat sage-green studio \
+background with soft even light."""
+
+RESTYLE_PROMPT = """\
+Redraw the second image so the woman looks exactly like the woman in the first image: the same \
+face, hair, body, clothing, grey skin with red muscles, background and lighting. Keep the second \
+image's pose, body position, equipment, camera angle and framing EXACTLY as they are; change \
+nothing about the position. Exactly one person. No text."""
+
+
+def _image_call(api, contents):
     from google.genai import types
-    hint = ex.get("hint") or ""
-    hint = f"Starting position (most important, follow it exactly): {hint}" if hint else ""
-    prompt = POSE_PROMPT.format(name=ex["name"], hint=hint, steps=" ".join(ex["steps"]), equipment=ex["equipment"],
-                                muscles=", ".join(ex["muscles"]),
-                                head=round(HEAD_MIN * 100), feet=round(FEET_MAX * 100))
     resp = api.models.generate_content(
-        model=IMAGE_MODEL,
-        contents=[types.Part.from_bytes(data=REFERENCE.read_bytes(), mime_type="image/png"), prompt],
+        model=IMAGE_MODEL, contents=contents,
         config=types.GenerateContentConfig(response_modalities=["IMAGE"],
                                            image_config=types.ImageConfig(aspect_ratio=GEN_ASPECT)),
     )
@@ -241,6 +247,24 @@ def make_pose(api, ex):
         if getattr(part, "inline_data", None) and part.inline_data.data:
             return part.inline_data.data, part.inline_data.mime_type or "image/png"
     raise RuntimeError("no image in the response (it may have been blocked)")
+
+
+def make_pose(api, ex, two_step=False):
+    """A start-pose still. two_step: first draw the pose without the reference (so its standing pose
+    can't leak in; best for lying, seated and bench exercises), then restyle it to the reference woman."""
+    from google.genai import types
+    hint = ex.get("hint") or ""
+    hint = f"Starting position (most important, follow it exactly): {hint}" if hint else ""
+    prompt = POSE_PROMPT.format(name=ex["name"], hint=hint, steps=" ".join(ex["steps"]), equipment=ex["equipment"],
+                                muscles=", ".join(ex["muscles"]),
+                                head=round(HEAD_MIN * 100), feet=round(FEET_MAX * 100))
+    ref = types.Part.from_bytes(data=REFERENCE.read_bytes(), mime_type="image/png")
+    if not two_step:
+        return _image_call(api, [ref, prompt])
+    first_paragraph_end = prompt.index("\n\n") + 2
+    pose_only = TWO_STEP_STYLE + "\n\n" + prompt[first_paragraph_end:]
+    data, mime = _image_call(api, [pose_only])
+    return _image_call(api, [ref, types.Part.from_bytes(data=data, mime_type=mime), RESTYLE_PROMPT])
 
 
 def make_video(api, ex, pose_bytes, pose_mime, dest, on_created=lambda _id: None):
@@ -486,7 +510,7 @@ def cmd_poses(args):
         if e["pose"] in ("ready", "approved") and not args.redo:
             continue
         print(f"[{n}/{len(ids)}] Pose: {ex['name']}")
-        got = retry("pose", lambda: make_pose(api, ex))
+        got = retry("pose", lambda: make_pose(api, ex, two_step=args.two_step))
         if not got:
             continue
         data, mime = got
@@ -677,7 +701,10 @@ def main():
     sp.add_argument("--at", type=float, default=0.0, help="time in seconds")
     sp.set_defaults(fn=cmd_reference)
 
-    sp = sub.add_parser("poses", help="1. generate start-pose stills"); selection(sp); sp.set_defaults(fn=cmd_poses)
+    sp = sub.add_parser("poses", help="1. generate start-pose stills"); selection(sp)
+    sp.add_argument("--two-step", action="store_true",
+                    help="draw the pose first, then give it the reference look (for lying/seated/bench exercises)")
+    sp.set_defaults(fn=cmd_poses)
 
     for name, field, frm, to, hlp in [
         ("approve", "pose", ("ready",), "approved", "2. approve poses"),
