@@ -354,11 +354,52 @@ def poster(final, dest):
 # ---------------------------------------------------------------------------------------------
 # Commands
 
+FACE_PROMPT = """\
+The first image is the character for a fitness app: keep everything about her exactly the same: \
+her body, pose, clothing, the grey skin with the muscle highlights, the framing, the plain flat \
+sage-green studio background and the lighting.
+
+Change only her face and hair so she looks like the person in the second photo: the same face \
+shape, features, eyes, eyebrows, nose, lips, skin tone and hairstyle. Keep the face in the same \
+grey style as the rest of the figure. No text, no other changes."""
+
+
 def cmd_reference(args):
-    """Grab a frame from a video you like as the character reference."""
-    run(["ffmpeg", "-y", "-v", "error", "-ss", str(args.at), "-i", str(Path(args.source).resolve()),
-         "-frames:v", "1", str(REFERENCE)])
-    print(f"Saved {REFERENCE.relative_to(REPO)}. Open it and check it's the look you want.")
+    """Make reference.png: a frame from a video you like, and/or that figure with your face."""
+    if args.source:
+        run(["ffmpeg", "-y", "-v", "error", "-ss", str(args.at), "-i", str(Path(args.source).resolve()),
+             "-frames:v", "1", str(REFERENCE)])
+        print(f"Saved {REFERENCE.name} from the video.")
+    if args.face:
+        if not REFERENCE.exists():
+            sys.exit("Make the figure first (reference --from <video>), then add your face.")
+        face = Path(args.face).expanduser().resolve()
+        if not face.exists():
+            sys.exit(f"Can't find {face}")
+        from google.genai import types
+        api = client()
+        mime = "image/png" if face.suffix.lower() == ".png" else "image/jpeg"
+        resp = retry("face", lambda: api.models.generate_content(
+            model=IMAGE_MODEL,
+            contents=[types.Part.from_bytes(data=REFERENCE.read_bytes(), mime_type="image/png"),
+                      types.Part.from_bytes(data=face.read_bytes(), mime_type=mime),
+                      FACE_PROMPT],
+            config=types.GenerateContentConfig(response_modalities=["IMAGE"],
+                                               image_config=types.ImageConfig(aspect_ratio=GEN_ASPECT))))
+        data = next((p.inline_data.data for p in (resp.candidates[0].content.parts if resp else [])
+                     if getattr(p, "inline_data", None) and p.inline_data.data), None)
+        if not data:
+            sys.exit("No image came back (it may have been blocked). Try another photo.")
+        backup = HERE / "reference-before-face.png"
+        if not backup.exists():
+            shutil.copy2(REFERENCE, backup)
+        Image = pillow()[0]
+        import io
+        Image.open(io.BytesIO(data)).convert("RGB").save(REFERENCE)
+        print(f"Saved {REFERENCE.name} with your face (the previous one is {backup.name}).")
+    if not (args.source or args.face):
+        sys.exit("Give --from <video> and/or --face <photo>.")
+    print("Open it and check it's the look you want before making poses.")
 
 
 def cmd_poses(args):
@@ -531,8 +572,9 @@ def main():
         sp.add_argument("--offset", type=int, default=0, help="skip this many first (with --limit)")
         sp.add_argument("--redo", action="store_true", help="regenerate even if one exists")
 
-    sp = sub.add_parser("reference", help="grab a video frame as the character reference (reference.png)")
-    sp.add_argument("--from", dest="source", required=True)
+    sp = sub.add_parser("reference", help="make the character reference (reference.png)")
+    sp.add_argument("--from", dest="source", help="a video to take the figure from")
+    sp.add_argument("--face", help="a photo of a face to give the figure")
     sp.add_argument("--at", type=float, default=0.0, help="time in seconds")
     sp.set_defaults(fn=cmd_reference)
 
