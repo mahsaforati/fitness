@@ -354,14 +354,28 @@ def poster(final, dest):
 # ---------------------------------------------------------------------------------------------
 # Commands
 
-FACE_PROMPT = """\
+FACE_PROMPTS = {
+    # A family resemblance: recognisably inspired by the photo, but her own person.
+    "light": """\
+The first image is the character for a fitness app: keep everything about her exactly the same: \
+her body, pose, clothing, the grey skin with the muscle highlights, the framing, the plain flat \
+sage-green studio background and the lighting.
+
+Change only her face and hair so she has a resemblance to the person in the second photo, like a \
+relative rather than the same person: borrow the general face shape, hair colour and hairstyle, \
+and the overall feel of the eyes and features, but keep her a distinct, generic character, not a \
+copy or portrait of that person. Keep the face in the same grey style as the rest of the figure. \
+No text, no other changes.""",
+    # Clearly the same person.
+    "strong": """\
 The first image is the character for a fitness app: keep everything about her exactly the same: \
 her body, pose, clothing, the grey skin with the muscle highlights, the framing, the plain flat \
 sage-green studio background and the lighting.
 
 Change only her face and hair so she looks like the person in the second photo: the same face \
 shape, features, eyes, eyebrows, nose, lips, skin tone and hairstyle. Keep the face in the same \
-grey style as the rest of the figure. No text, no other changes."""
+grey style as the rest of the figure. No text, no other changes.""",
+}
 
 
 def cmd_reference(args):
@@ -383,7 +397,7 @@ def cmd_reference(args):
             model=IMAGE_MODEL,
             contents=[types.Part.from_bytes(data=REFERENCE.read_bytes(), mime_type="image/png"),
                       types.Part.from_bytes(data=face.read_bytes(), mime_type=mime),
-                      FACE_PROMPT],
+                      FACE_PROMPTS[args.likeness]],
             config=types.GenerateContentConfig(response_modalities=["IMAGE"],
                                                image_config=types.ImageConfig(aspect_ratio=GEN_ASPECT))))
         data = next((p.inline_data.data for p in (resp.candidates[0].content.parts if resp else [])
@@ -575,6 +589,8 @@ def main():
     sp = sub.add_parser("reference", help="make the character reference (reference.png)")
     sp.add_argument("--from", dest="source", help="a video to take the figure from")
     sp.add_argument("--face", help="a photo of a face to give the figure")
+    sp.add_argument("--likeness", choices=["light", "strong"], default="light",
+                    help="light (default): a resemblance; strong: the same person")
     sp.add_argument("--at", type=float, default=0.0, help="time in seconds")
     sp.set_defaults(fn=cmd_reference)
 
