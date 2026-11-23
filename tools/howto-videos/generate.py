@@ -101,6 +101,20 @@ POSE_HINTS = {
              "head to heels. Seen from the side.",
 }
 
+# The movement itself, for exercises where Omni made too small a movement from the steps alone.
+VIDEO_HINTS = {
+    "dead-bug": "Big, clear movement: her RIGHT arm lowers all the way back overhead and her LEFT leg straightens "
+                "out long, until both hover just above the floor; then both return to the start. The other arm "
+                "and leg stay still. Her lower back stays pressed to the floor.",
+    "glute-bridge": "Big, clear movement: she drives her hips up HIGH until her body is a straight line from knees "
+                    "to shoulders, holds briefly at the top, then lowers her hips back to the floor.",
+    "hip-thrust": "Big, clear movement: she drives her hips up HIGH until her torso is level with the bench and "
+                  "her shins are vertical (a straight line from shoulders to knees), then lowers her hips back "
+                  "down near the floor.",
+    "push-up": "Full depth: she lowers until her chest is just above the floor with her elbows bent to 90 degrees, "
+               "then pushes back up to straight arms. Her body stays in one straight line.",
+}
+
 VIDEO_PROMPT = """\
 Both images are the same frame: the woman in her starting position for {name}. Animate exactly one \
 slow, controlled repetition that starts in this pose and returns to exactly this pose at the end, \
@@ -108,7 +122,7 @@ so the clip loops seamlessly.
 [0-{half}s] She performs the movement through its FULL range of motion, all the way to the end \
 position the steps describe (not a half or partial rep): {steps}
 [{half}-{dur}s] She returns smoothly to the starting position.
-Correct form matters more than anything: this video teaches the exercise. Make sure she avoids: {avoid}
+{hint}Correct form matters more than anything: this video teaches the exercise. Make sure she avoids: {avoid}
 
 A single continuous shot with a locked-off static camera: no zoom, no pan, no cuts. She stays the \
 same size and in the same place in the frame. Only the equipment she is already holding or using; \
@@ -132,7 +146,7 @@ def plan_exercises():
         avoid = re.search(r'avoid:\s*"([^"]+)"', body).group(1)
         muscles = re.findall(r'"([^"]+)"', re.search(r'muscles:\s*\[(.*?)\]', body, re.S).group(1))
         cat = catalog.get(plan_map.get(ex_id, ""), {})
-        out[ex_id] = dict(name=name, steps=steps, avoid=avoid, muscles=muscles,
+        out[ex_id] = dict(id=ex_id, name=name, steps=steps, avoid=avoid, muscles=muscles,
                           equipment=cat.get("equipment", "dumbbells"), hint=POSE_HINTS.get(ex_id))
     return out
 
@@ -142,7 +156,7 @@ def catalog_exercises():
     out = {}
     for c in json.loads((REPO / "Fitness" / "ExerciseCatalog.json").read_text()):
         steps = [s for s in c.get("steps", []) if not s.lower().startswith("repeat")]
-        out[c["id"]] = dict(name=c["name"], steps=steps, avoid=c.get("avoid") or "poor form, jerky movement",
+        out[c["id"]] = dict(id=c["id"], name=c["name"], steps=steps, avoid=c.get("avoid") or "poor form, jerky movement",
                             muscles=[c["target"]] + c.get("secondary", []), equipment=c["equipment"])
     return out
 
@@ -271,7 +285,9 @@ def make_video(api, ex, pose_bytes, pose_mime, dest, on_created=lambda _id: None
     b64 = base64.b64encode(pose_bytes).decode()
     steps = ex["steps"]
     half = CLIP_SECONDS / 2
-    prompt = VIDEO_PROMPT.format(name=ex["name"], steps=" ".join(steps), avoid=ex["avoid"],
+    hint = VIDEO_HINTS.get(ex.get("id", ""), "")
+    hint = f"The movement (most important): {hint}\n" if hint else ""
+    prompt = VIDEO_PROMPT.format(name=ex["name"], hint=hint, steps=" ".join(steps), avoid=ex["avoid"],
                                  half=f"{half:g}", dur=CLIP_SECONDS)
     frame = {"type": "image", "data": b64, "mime_type": pose_mime}
     interaction = api.interactions.create(
