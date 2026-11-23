@@ -49,7 +49,7 @@ To give her your face, add a clear photo of yourself (front-facing, good light, 
 python3 generate.py reference --face ~/Desktop/my-face.jpg
 ```
 
-That changes only her face and hair and keeps everything else; the previous figure is kept as `reference-before-face.png`. Poses made before the change still have the old face: redo them with `poses --redo`.
+By default she gets a **resemblance** (like a relative: your face shape, hair and general look, but her own person); add `--likeness strong` to make her look like you. Only her face and hair change; the previous figure is kept as `reference-before-face.png`. Poses made before the change still have the old face: redo them with `poses --redo`.
 
 …or drop your own `reference.png` (a still, plain flat sage background, full body) into this folder.
 
