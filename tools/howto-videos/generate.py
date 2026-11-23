@@ -52,7 +52,8 @@ HEAD_MIN, FEET_MAX = 0.24, 0.72
 
 POSE_PROMPT = """\
 Use the woman in the reference image: the same face, hair, body, skin tones, clothing and style, \
-on the same plain flat sage-green studio background.
+on the same plain flat sage-green studio background. The reference only shows how she LOOKS: ignore \
+its standing pose and the dumbbell she holds there, and pose her as described below.
 
 Show her holding still in the STARTING position of this exercise: {name}.
 {hint}
@@ -76,20 +77,21 @@ else in the picture."""
 POSE_HINTS = {
     "db-rdl": "Standing tall, holding one dumbbell in EACH hand (two dumbbells) in front of her thighs, "
               "palms facing her thighs, knees soft.",
-    "glute-bridge": "Lying on her back on the floor, knees bent, feet flat on the floor, hips DOWN resting "
-                    "on the floor (not lifted yet), one dumbbell resting across her hip bones, held with both hands. "
-                    "Seen from the side.",
-    "dead-bug": "Lying on her back on the floor (NOT standing): both arms pointing straight up to the ceiling, "
-                "hips and knees bent 90 degrees with shins parallel to the floor (tabletop position). "
-                "No equipment. Seen from the side.",
-    "db-bench": "Lying on her back on a flat weight bench, feet flat on the floor, holding a dumbbell in each "
-                "hand beside her chest, elbows slightly below the bench. Seen from the side.",
+    "glute-bridge": "Lying flat on her back on the floor, knees bent, feet flat, hips and bottom resting ON the "
+                    "floor (not lifted). One dumbbell lies across her hip bones (her pelvis, NOT her chest), "
+                    "both hands holding it there. Seen from the side.",
+    "dead-bug": "Lying on her back on the floor (NOT standing). BOTH arms point straight up to the ceiling. "
+                "BOTH legs are lifted: knees bent 90 degrees directly above her hips, shins horizontal, both feet "
+                "in the air, no foot touching the floor (tabletop). No equipment. Seen from the side.",
+    "db-bench": "She is LYING DOWN, horizontal, on her back on a flat weight bench (she is NOT standing). "
+                "Her head, shoulders and bottom are on the bench, feet flat on the floor either side of it, a "
+                "dumbbell in each hand beside her chest. Seen from the side.",
     "seated-press": "Sitting upright on a bench with a vertical back rest (NOT standing), feet flat on the floor, "
                     "a dumbbell in each hand at shoulder height, palms facing forward.",
-    "hip-thrust": "Sitting on the floor with her upper back (shoulder blades) resting on the long edge of a "
-                  "low flat bench, knees bent, feet flat on the floor, hips low near the floor, one dumbbell "
-                  "across her hips held with both hands. Seen from the side. The bench is fully visible "
-                  "and doesn't reach the edges of the picture.",
+    "hip-thrust": "She is NOT sitting on the bench. Her bottom is on the floor IN FRONT of a low flat bench, and "
+                  "only her upper back (shoulder blades) leans against the long edge of the bench behind her. "
+                  "Knees bent, feet flat on the floor, hips low. One dumbbell across her hips, both hands on it. "
+                  "Seen from the side. The bench is fully visible and doesn't reach the edges of the picture.",
     "side-plank": "Side plank on her FOREARM (not a straight arm): lying on her side, elbow directly under her "
                   "shoulder, forearm flat on the floor, feet stacked, hips lifted so her body forms a straight "
                   "line, top hand resting on her hip.",
