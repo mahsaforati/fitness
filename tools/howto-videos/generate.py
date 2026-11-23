@@ -153,7 +153,9 @@ def client():
         from google import genai
     except ImportError:
         sys.exit("Install the Google SDK first:  pip install -U google-genai pillow")
-    api = genai.Client()
+    from google.genai import types
+    # Omni (video) is only on the v1beta API; recent SDKs default to v1, which answers "model not found".
+    api = genai.Client(http_options=types.HttpOptions(api_version="v1beta"))
     if not hasattr(api, "interactions"):
         # The Interactions API (needed for Omni video) is only in recent SDKs, which need Python 3.10+.
         sys.exit(f"Your Google SDK is too old for video (you're on Python {sys.version.split()[0]}).\n"
