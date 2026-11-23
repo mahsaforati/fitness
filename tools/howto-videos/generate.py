@@ -367,6 +367,16 @@ relative rather than the same person: borrow the general face shape, hair colour
 and the overall feel of the eyes and features, but keep her a distinct, generic character, not a \
 copy or portrait of that person. Keep the face in the same grey style as the rest of the figure. \
 No text, no other changes.""",
+    # In between: clearly inspired by the photo, a close resemblance, still not a portrait.
+    "medium": """\
+The first image is the character for a fitness app: keep everything about her exactly the same: \
+her body, pose, clothing, the grey skin with the muscle highlights, the framing, the plain flat \
+sage-green studio background and the lighting.
+
+Change only her face and hair so she closely resembles the person in the second photo, like a \
+sister: the same face shape, eye shape, eyebrows, nose, lips, smile and hairstyle, while staying a \
+stylised character rather than an exact portrait. Keep the face in the same grey style as the rest \
+of the figure. No text, no other changes.""",
     # Clearly the same person.
     "strong": """\
 The first image is the character for a fitness app: keep everything about her exactly the same: \
@@ -386,8 +396,13 @@ def cmd_reference(args):
              "-frames:v", "1", str(REFERENCE)])
         print(f"Saved {REFERENCE.name} from the video.")
     if args.face:
-        if not REFERENCE.exists():
-            sys.exit("Make the figure first (reference --from <video>), then add your face.")
+        backup = HERE / "reference-before-face.png"
+        if not backup.exists():
+            if not REFERENCE.exists():
+                sys.exit("Make the figure first (reference --from <video>), then add your face.")
+            shutil.copy2(REFERENCE, backup)
+        base = backup                    # always start from the figure without a face change
+        out = HERE / args.out if args.out else REFERENCE
         face = Path(args.face).expanduser().resolve()
         if not face.exists():
             sys.exit(f"Can't find {face}")
@@ -396,22 +411,21 @@ def cmd_reference(args):
         mime = "image/png" if face.suffix.lower() == ".png" else "image/jpeg"
         resp = retry("face", lambda: api.models.generate_content(
             model=IMAGE_MODEL,
-            contents=[types.Part.from_bytes(data=REFERENCE.read_bytes(), mime_type="image/png"),
+            contents=[types.Part.from_bytes(data=base.read_bytes(), mime_type="image/png"),
                       types.Part.from_bytes(data=face.read_bytes(), mime_type=mime),
-                      FACE_PROMPTS[args.likeness]],
+                      FACE_PROMPTS[args.likeness] + (f"\n\nAlso: {args.note}" if args.note else "")],
             config=types.GenerateContentConfig(response_modalities=["IMAGE"],
                                                image_config=types.ImageConfig(aspect_ratio=GEN_ASPECT))))
         data = next((p.inline_data.data for p in (resp.candidates[0].content.parts if resp else [])
                      if getattr(p, "inline_data", None) and p.inline_data.data), None)
         if not data:
             sys.exit("No image came back (it may have been blocked). Try another photo.")
-        backup = HERE / "reference-before-face.png"
-        if not backup.exists():
-            shutil.copy2(REFERENCE, backup)
         Image = pillow()[0]
         import io
-        Image.open(io.BytesIO(data)).convert("RGB").save(REFERENCE)
-        print(f"Saved {REFERENCE.name} with your face (the previous one is {backup.name}).")
+        Image.open(io.BytesIO(data)).convert("RGB").save(out)
+        print(f"Saved {out.name} with your face (the figure without it is {backup.name}).")
+        if out != REFERENCE:
+            print(f"To use it for poses:  cp {out.name} reference.png")
     if not (args.source or args.face):
         sys.exit("Give --from <video> and/or --face <photo>.")
     print("Open it and check it's the look you want before making poses.")
@@ -590,8 +604,10 @@ def main():
     sp = sub.add_parser("reference", help="make the character reference (reference.png)")
     sp.add_argument("--from", dest="source", help="a video to take the figure from")
     sp.add_argument("--face", help="a photo of a face to give the figure")
-    sp.add_argument("--likeness", choices=["light", "strong"], default="light",
-                    help="light (default): a resemblance; strong: the same person")
+    sp.add_argument("--likeness", choices=["light", "medium", "strong"], default="light",
+                    help="light (default): a resemblance; medium: a close resemblance; strong: the same person")
+    sp.add_argument("--note", help="extra wishes, e.g. \"looser curls\"")
+    sp.add_argument("--out", help="save as this file instead of replacing reference.png, e.g. reference-v2.png")
     sp.add_argument("--at", type=float, default=0.0, help="time in seconds")
     sp.set_defaults(fn=cmd_reference)
 
