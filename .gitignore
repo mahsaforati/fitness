@@ -11,3 +11,4 @@ __pycache__/
 tools/howto-videos/.venv/
 tools/howto-videos/reference-before-face.png
 tools/howto-videos/face.*
+tools/howto-videos/reference-v*.png
