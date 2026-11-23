@@ -53,24 +53,76 @@ By default she gets a **resemblance** (like a relative: your face shape, hair an
 
 …or drop your own `reference.png` (a still, plain flat sage background, full body) into this folder.
 
-## Making videos — start with the plan's 18 exercises
+## Making videos: the checklist (follow it every time)
+
+Every step waits for you, so nothing is paid for or put in the app until you've looked at it.
+`python3 generate.py status` always prints the exact next command, so if you're ever unsure where
+you are, run that.
+
+**0. Start a session** (every new Terminal window):
 
 ```bash
-python3 generate.py poses                 # 1. stills for every plan exercise
-open out/review.html                      #    look at them
-python3 generate.py approve goblet-squat db-rdl …   # 2. or: approve --all
-python3 generate.py reject-pose plank     #    bad ones; then `poses` again redoes only those
-python3 generate.py videos                # 3. videos for the approved poses
-open out/review.html                      #    watch them as the app will show them (4:5)
-python3 generate.py accept goblet-squat … # 4. or: accept --all
-python3 generate.py reject-video db-rdl   #    then `videos` again redoes only those
-python3 generate.py install               # 5. into the app
-cd ../.. && xcodegen generate             #    then build in Xcode
+cd ~/projects/fitness
+git checkout main && git pull            # be on main, with the latest script
+cd tools/howto-videos
+source .venv/bin/activate                # the newer Python (see One-time setup)
 ```
 
-`python3 generate.py status` shows where every exercise is. If it stops halfway (no internet, a rate limit), run the same command again: finished ones are skipped.
+**1. Poses** (a still of each start position, ~seconds each):
 
-Try one exercise first: `python3 generate.py poses --only goblet-squat`.
+```bash
+python3 generate.py poses                       # every plan exercise that has no pose yet
+python3 generate.py poses --only db-rdl plank   # or just some
+```
+
+**2. Check the poses**: `open out/review.html`. For each one check:
+- the right start position for the exercise, holding the right equipment
+- **no extra objects** (spare weights, benches she isn't using)
+- her whole body is visible, nothing cut off
+- the right muscles are red
+
+Then approve the good ones and redo the bad ones:
+
+```bash
+python3 generate.py approve db-rdl plank …      # or: approve --all
+python3 generate.py reject-pose step-up         # then run `poses` again: it redoes only rejected ones
+```
+
+**3. Videos** (only approved poses; ~1–2 minutes each):
+
+```bash
+python3 generate.py videos
+```
+
+If one fails after Google made it, just run `videos` again: it fetches the same video, you don't pay twice.
+
+**4. Check the videos**: `open out/review.html` (they play there exactly as the app crops them). For each one check:
+- **full range of motion** (e.g. thighs parallel in a squat, not a half rep)
+- correct form, nothing on the "avoid" list
+- one rep that ends where it started (the loop has no jump)
+- no new objects, no text, camera doesn't move
+
+```bash
+python3 generate.py accept db-rdl plank …       # or: accept --all
+python3 generate.py reject-video step-up        # then run `videos` again: it redoes only rejected ones
+```
+
+**5. Put them in the app**:
+
+```bash
+python3 generate.py install      # copies accepted videos into Fitness/HowToVideos/ and updates the Xcode project
+```
+
+Build and run in Xcode (if a video doesn't change: Product › Clean Build Folder, then run).
+
+**6. Save them in git** so they're not only on this Mac:
+
+```bash
+cd ~/projects/fitness
+git add Fitness/HowToVideos
+git commit -m "How videos: <which ones>"
+git push
+```
 
 ## The big list (1,324 exercises)
 
