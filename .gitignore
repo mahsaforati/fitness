@@ -10,3 +10,4 @@ tools/howto-videos/out/
 __pycache__/
 tools/howto-videos/.venv/
 tools/howto-videos/reference-before-face.png
+tools/howto-videos/face.*
