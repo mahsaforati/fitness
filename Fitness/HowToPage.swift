@@ -18,8 +18,11 @@ enum HowToVideo {
     // Placeholder for every exercise until the new animations are finished.
     static let placeholderURL = Bundle.main.url(forResource: "HowToPlaceholder", withExtension: "mp4")
 
-    // The video for an exercise. Swap this for a per-exercise lookup once the new videos exist.
-    static func url(for exerciseID: String) -> URL? { placeholderURL }
+    // The video for an exercise: Fitness/HowToVideos/howto-<id>.mp4 (put there by tools/howto-videos),
+    // or the placeholder until that exercise's video is done.
+    static func url(for exerciseID: String) -> URL? {
+        Bundle.main.url(forResource: "howto-\(exerciseID)", withExtension: "mp4") ?? placeholderURL
+    }
 
     // Shown behind the video while it loads (and if a video file is missing).
     static let backdrop = LinearGradient(

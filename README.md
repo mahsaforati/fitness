@@ -23,6 +23,7 @@ iOS app (SwiftUI + SwiftData) for logging weights and reps against a 6-month hom
     - Plain, flat background (or transparent)
     - Keep the figure out of the top ~165 px (buttons), bottom ~235 px (exercise name) and ~55 px at each side
     - Each file should come out at **~0.5–0.7 MB**. Bundle only the plan's videos (~17, ~12 MB); the rest of the list (1,324) downloads on first view
+  - **Generating them:** `tools/howto-videos/generate.py` makes poses and videos with Google's AI models, crops them to this spec and installs accepted ones as `Fitness/HowToVideos/howto-<id>.mp4` (see `tools/howto-videos/README.md`). Exercises without one show the placeholder.
 
 ## Run it
 Option A — XcodeGen (recommended):
