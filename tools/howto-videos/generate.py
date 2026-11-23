@@ -222,6 +222,12 @@ def make_video(api, ex, pose_bytes, pose_mime, dest):
 # ---------------------------------------------------------------------------------------------
 # ffmpeg
 
+# Homebrew's folders, in case they're missing from PATH (Apple silicon, then Intel Macs).
+for _brew_bin in ("/opt/homebrew/bin", "/usr/local/bin"):
+    if Path(_brew_bin).is_dir() and _brew_bin not in os.environ.get("PATH", "").split(os.pathsep):
+        os.environ["PATH"] = os.environ.get("PATH", "") + os.pathsep + _brew_bin
+
+
 def run(cmd):
     if shutil.which(cmd[0]) is None:
         sys.exit(f"{cmd[0]} isn't installed. Install it with:  brew install ffmpeg\n"
