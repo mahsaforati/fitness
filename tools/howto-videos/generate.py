@@ -73,14 +73,15 @@ VIDEO_PROMPT = """\
 Both images are the same frame: the woman in her starting position for {name}. Animate exactly one \
 slow, controlled repetition that starts in this pose and returns to exactly this pose at the end, \
 so the clip loops seamlessly.
-[0-{half}s] {down}
+[0-{half}s] She performs the movement through its FULL range of motion, all the way to the end \
+position the steps describe (not a half or partial rep): {steps}
 [{half}-{dur}s] She returns smoothly to the starting position.
-Form: {steps}
-Make sure she avoids: {avoid}
+Correct form matters more than anything: this video teaches the exercise. Make sure she avoids: {avoid}
 
 A single continuous shot with a locked-off static camera: no zoom, no pan, no cuts. She stays the \
-same size and in the same place in the frame. Same plain flat sage-green background throughout, \
-no text or captions. Silent: no music, no dialogue, no sound effects."""
+same size and in the same place in the frame. Only the equipment she is already holding or using; \
+no new objects appear. Same plain flat sage-green background throughout, no text or captions. \
+Silent: no music, no dialogue, no sound effects."""
 
 # ---------------------------------------------------------------------------------------------
 # Exercises
@@ -211,10 +212,8 @@ def make_pose(api, ex):
 def make_video(api, ex, pose_bytes, pose_mime, dest, on_created=lambda _id: None):
     b64 = base64.b64encode(pose_bytes).decode()
     steps = ex["steps"]
-    down = next((s for s in steps if not s.lower().startswith(("hold", "stand", "lie", "sit", "start", "feet", "grab", "place"))),
-                steps[-1] if steps else "She performs the movement.")
     half = CLIP_SECONDS / 2
-    prompt = VIDEO_PROMPT.format(name=ex["name"], down=down, steps=" ".join(steps), avoid=ex["avoid"],
+    prompt = VIDEO_PROMPT.format(name=ex["name"], steps=" ".join(steps), avoid=ex["avoid"],
                                  half=f"{half:g}", dur=CLIP_SECONDS)
     frame = {"type": "image", "data": b64, "mime_type": pose_mime}
     interaction = api.interactions.create(
@@ -302,6 +301,16 @@ def reframe(src_path, dest_path):
     small = src.resize((round(W * scale), round(H * scale)), Image.LANCZOS)
     ox = round(W / 2 - (x0 + x1) / 2 * scale)          # centred on her
     oy = round(t_bot - y1 * scale)                      # feet on the bottom of the safe area
+
+    # Shrinking her squeezes the studio's shading too, so the background around her no longer matches
+    # the background where she's placed (that left a lighter patch around her feet). Shift the shrunk
+    # image's colours row by row so its background equals the plate at its new position.
+    sw, sh = small.size
+    src_bg = plate.resize((sw, sh), Image.LANCZOS)
+    dst_bg = Image.new("RGB", (sw, sh))
+    dst_bg.paste(plate, (-ox, -oy))
+    small = ImageChops.subtract(ImageChops.add(small, ImageChops.subtract(dst_bg, src_bg)),
+                                ImageChops.subtract(src_bg, dst_bg))
 
     feather = max(40, W // 10)                          # soft edges so the paste blends in
     soft = Image.new("L", small.size, 0)
@@ -549,12 +558,21 @@ def cmd_crop(args):
 def cmd_install(args):
     status = load_status()
     APP_VIDEOS.mkdir(exist_ok=True)
-    done = 0
+    done = []
     for ex_id, e in status.items():
         if e.get("video") == "accepted" and (not args.ids or ex_id in args.ids):
             shutil.copy2(OUT / ex_id / "final.mp4", APP_VIDEOS / f"howto-{ex_id}.mp4")
-            done += 1
-    print(f"Copied {done} video(s) into Fitness/HowToVideos/. Run `xcodegen generate`, then build the app.")
+            done.append(ex_id)
+    if not done:
+        ready = [i for i, e in status.items() if e.get("video") == "ready"]
+        sys.exit("Nothing copied: no accepted videos."
+                 + (f" Accept them first:  python3 generate.py accept {' '.join(ready)}" if ready else ""))
+    print(f"Copied {len(done)} video(s) into Fitness/HowToVideos/: {', '.join(done)}")
+    if shutil.which("xcodegen"):
+        subprocess.run(["xcodegen", "generate", "--quiet"], cwd=REPO)
+        print("Updated the Xcode project. Build and run the app in Xcode.")
+    else:
+        print("Now run `xcodegen generate` in the project folder, then build the app.")
 
 
 def cmd_status(args):
@@ -564,6 +582,20 @@ def cmd_status(args):
     for ex_id, e in sorted(status.items()):
         size = f"{e['size_mb']:.2f} MB" if "size_mb" in e else ""
         print(f"{ex_id:20} pose: {e['pose']:9} video: {e['video']:9} {size:>8}  {e.get('name', '')}")
+    # What to do next, so nothing gets skipped.
+    by = lambda f, v: [i for i, e in sorted(status.items()) if e.get(f) == v]
+    steps = []
+    if by("pose", "ready"):
+        steps.append(f"check poses in out/review.html, then:  python3 generate.py approve {' '.join(by('pose', 'ready'))}")
+    if [i for i in by("pose", "approved") if status[i]["video"] in ("none", "rejected")]:
+        steps.append("make the videos:  python3 generate.py videos")
+    if by("video", "ready"):
+        steps.append(f"watch them in out/review.html, then:  python3 generate.py accept {' '.join(by('video', 'ready'))}")
+    installed = {p.stem.removeprefix("howto-") for p in APP_VIDEOS.glob("howto-*.mp4")} if APP_VIDEOS.exists() else set()
+    if [i for i in by("video", "accepted") if i not in installed]:
+        steps.append("put them in the app:  python3 generate.py install")
+    if steps:
+        print("\nNext:\n  " + "\n  ".join(steps))
 
 
 def write_review(status):
