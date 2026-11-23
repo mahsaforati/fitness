@@ -223,6 +223,9 @@ def make_video(api, ex, pose_bytes, pose_mime, dest):
 # ffmpeg
 
 def run(cmd):
+    if shutil.which(cmd[0]) is None:
+        sys.exit(f"{cmd[0]} isn't installed. Install it with:  brew install ffmpeg\n"
+                 "(No Homebrew? Get it first from https://brew.sh)")
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else "ffmpeg failed")
