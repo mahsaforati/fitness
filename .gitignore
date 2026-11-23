@@ -8,3 +8,4 @@ Fitness.xcodeproj/
 # How-video generator working files
 tools/howto-videos/out/
 __pycache__/
+tools/howto-videos/.venv/
