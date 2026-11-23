@@ -65,8 +65,9 @@ her horizontally, full body visible, at a slight three-quarter angle so the move
 to see.
 
 Show the muscles this exercise works ({muscles}) in red, like the reference. Plain background, no \
-floor markings, no shadows on the wall, no text, no logos, no extra people, no props except the \
-equipment."""
+floor markings, no shadows on the wall, no text, no logos, no extra people. Only the equipment she \
+is holding or using for this exercise: no spare weights or other objects on the floor or anywhere \
+else in the picture."""
 
 VIDEO_PROMPT = """\
 Both images are the same frame: the woman in her starting position for {name}. Animate exactly one \
