@@ -172,7 +172,13 @@ def retry(what, fn, attempts=3):
         try:
             return fn()
         except Exception as err:  # network hiccups, rate limits, safety blocks…
-            print(f"   {what} failed ({err}).", end="")
+            import traceback
+            frames = traceback.extract_tb(err.__traceback__)
+            mine = [f for f in frames if Path(f.filename).name == "generate.py"]
+            where = f"line {mine[-1].lineno}: {mine[-1].line}" if mine else ""
+            print(f"   {what} failed ({type(err).__name__}: {err}) [{where}].", end="")
+            if os.environ.get("HOWTO_DEBUG"):
+                traceback.print_exc()
             if any(code in str(err) for code in ("404", "not_found", "NOT_FOUND", "PERMISSION_DENIED", "403")):
                 print(" Not worth retrying.")
                 return None
@@ -201,7 +207,7 @@ def make_pose(api, ex):
     raise RuntimeError("no image in the response (it may have been blocked)")
 
 
-def make_video(api, ex, pose_bytes, pose_mime, dest):
+def make_video(api, ex, pose_bytes, pose_mime, dest, on_created=lambda _id: None):
     b64 = base64.b64encode(pose_bytes).decode()
     steps = ex["steps"]
     down = next((s for s in steps if not s.lower().startswith(("hold", "stand", "lie", "sit", "start", "feet", "grab", "place"))),
@@ -216,22 +222,28 @@ def make_video(api, ex, pose_bytes, pose_mime, dest):
         response_format={"type": "video", "aspect_ratio": GEN_ASPECT, "resolution": GEN_RESOLUTION,
                          "duration": f"{CLIP_SECONDS}s", "delivery": "uri"},
     )
-    video = interaction.output_video
-    if getattr(video, "uri", None):
-        file_id = video.uri.split("/")[-1]
-        while True:
-            info = api.files.get(name=f"files/{file_id}")
-            state = info.state.name
-            if state == "ACTIVE":
-                break
-            if state == "FAILED":
-                raise RuntimeError("generation failed")
-            time.sleep(5)
-        api.files.download(file=video.uri, destination=str(dest))
-        if not dest.exists():   # some SDK versions return the bytes instead of writing the file
-            dest.write_bytes(api.files.download(file=video.uri))
-    else:
-        dest.write_bytes(base64.b64decode(video.data))
+    on_created(interaction.id)      # saved, so a failed download never means paying for the video twice
+    fetch_video(api, interaction.id, dest, interaction)
+
+
+def fetch_video(api, interaction_id, dest, interaction=None):
+    """Save a finished interaction's video: from its file link, else inline from the interaction itself."""
+    video = getattr(interaction, "output_video", None) if interaction else None
+    uri = getattr(video, "uri", None)
+    if uri:
+        try:
+            data = api.files.download(file=uri)
+            if data:
+                dest.write_bytes(data)
+                return
+        except Exception as err:
+            print(f"   (file link didn't work: {err}; fetching it from the interaction instead)")
+    # Google's docs: getting an interaction returns the video inline even when made with a file link.
+    got = api.interactions.get(interaction_id)
+    data = getattr(getattr(got, "output_video", None), "data", None)
+    if not data:
+        raise RuntimeError(f"no video in interaction {interaction_id} yet")
+    dest.write_bytes(base64.b64decode(data))
 
 # ---------------------------------------------------------------------------------------------
 # Reframing: the image model ignores framing instructions and draws her top to bottom, so after the
@@ -409,7 +421,18 @@ def cmd_videos(args):
         print(f"[{n}/{len(todo)}] Video: {ex['name']}")
         pose = (OUT / e["pose_file"]).read_bytes()
         raw = folder / "raw.mp4"
-        if retry("video", lambda: make_video(api, ex, pose, e.get("pose_mime", "image/png"), raw)) is None and not raw.exists():
+        if raw.exists() and args.redo:
+            raw.unlink()
+        if e.get("interaction") and not raw.exists() and not args.redo:
+            print(f"   fetching the video already made (interaction {e['interaction']})")
+            retry("download", lambda: fetch_video(api, e["interaction"], raw))
+        if not raw.exists():
+            def saved(interaction_id, e=e):
+                e["interaction"] = interaction_id
+                save_status(status)
+            # One attempt: a failure after Google made the video is recovered above on the next run.
+            retry("video", lambda: make_video(api, ex, pose, e.get("pose_mime", "image/png"), raw, saved), attempts=1)
+        if not raw.exists():
             continue
         try:
             crop(raw, folder / "final.mp4")
