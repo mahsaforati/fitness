@@ -54,7 +54,8 @@ POSE_PROMPT = """\
 Use the woman in the reference image: the same face, hair, body, skin tones, clothing and style, \
 on the same plain flat sage-green studio background.
 
-Show her standing still in the STARTING position of this exercise: {name}.
+Show her holding still in the STARTING position of this exercise: {name}.
+{hint}
 How the exercise is done: {steps}
 Equipment: {equipment}.
 
@@ -64,10 +65,39 @@ her body) are no lower than {feet}% down. Leave plain empty background above and
 her horizontally, full body visible, at a slight three-quarter angle so the movement will be easy \
 to see.
 
-Show the muscles this exercise works ({muscles}) in red, like the reference. Plain background, no \
+Exactly ONE person in the picture. Keep her face, hair and look exactly as in the reference, \
+whatever her position. Show the muscles this exercise works ({muscles}) in red, like the reference. Plain background, no \
 floor markings, no shadows on the wall, no text, no logos, no extra people. Only the equipment she \
 is holding or using for this exercise: no spare weights or other objects on the floor or anywhere \
 else in the picture."""
+
+# Exact start positions for plan exercises the image model got wrong from the steps alone
+# (it tends to copy the reference and draw her standing). Shown to it as the most important line.
+POSE_HINTS = {
+    "db-rdl": "Standing tall, holding one dumbbell in EACH hand (two dumbbells) in front of her thighs, "
+              "palms facing her thighs, knees soft.",
+    "glute-bridge": "Lying on her back on the floor, knees bent, feet flat on the floor, hips DOWN resting "
+                    "on the floor (not lifted yet), one dumbbell resting across her hip bones, held with both hands. "
+                    "Seen from the side.",
+    "dead-bug": "Lying on her back on the floor (NOT standing): both arms pointing straight up to the ceiling, "
+                "hips and knees bent 90 degrees with shins parallel to the floor (tabletop position). "
+                "No equipment. Seen from the side.",
+    "db-bench": "Lying on her back on a flat weight bench, feet flat on the floor, holding a dumbbell in each "
+                "hand beside her chest, elbows slightly below the bench. Seen from the side.",
+    "seated-press": "Sitting upright on a bench with a vertical back rest (NOT standing), feet flat on the floor, "
+                    "a dumbbell in each hand at shoulder height, palms facing forward.",
+    "hip-thrust": "Sitting on the floor with her upper back (shoulder blades) resting on the long edge of a "
+                  "low flat bench, knees bent, feet flat on the floor, hips low near the floor, one dumbbell "
+                  "across her hips held with both hands. Seen from the side. The bench is fully visible "
+                  "and doesn't reach the edges of the picture.",
+    "side-plank": "Side plank on her FOREARM (not a straight arm): lying on her side, elbow directly under her "
+                  "shoulder, forearm flat on the floor, feet stacked, hips lifted so her body forms a straight "
+                  "line, top hand resting on her hip.",
+    "push-up": "High plank on her hands (top of a push-up): hands just wider than shoulders, arms straight, "
+               "body in one straight line from head to heels. Seen from the side.",
+    "plank": "Forearm plank: forearms on the floor, elbows under shoulders, body in one straight line from "
+             "head to heels. Seen from the side.",
+}
 
 VIDEO_PROMPT = """\
 Both images are the same frame: the woman in her starting position for {name}. Animate exactly one \
@@ -101,7 +131,7 @@ def plan_exercises():
         muscles = re.findall(r'"([^"]+)"', re.search(r'muscles:\s*\[(.*?)\]', body, re.S).group(1))
         cat = catalog.get(plan_map.get(ex_id, ""), {})
         out[ex_id] = dict(name=name, steps=steps, avoid=avoid, muscles=muscles,
-                          equipment=cat.get("equipment", "dumbbells"))
+                          equipment=cat.get("equipment", "dumbbells"), hint=POSE_HINTS.get(ex_id))
     return out
 
 
@@ -194,7 +224,9 @@ def retry(what, fn, attempts=3):
 
 def make_pose(api, ex):
     from google.genai import types
-    prompt = POSE_PROMPT.format(name=ex["name"], steps=" ".join(ex["steps"]), equipment=ex["equipment"],
+    hint = ex.get("hint") or ""
+    hint = f"Starting position (most important, follow it exactly): {hint}" if hint else ""
+    prompt = POSE_PROMPT.format(name=ex["name"], hint=hint, steps=" ".join(ex["steps"]), equipment=ex["equipment"],
                                 muscles=", ".join(ex["muscles"]),
                                 head=round(HEAD_MIN * 100), feet=round(FEET_MAX * 100))
     resp = api.models.generate_content(
