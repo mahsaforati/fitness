@@ -152,8 +152,17 @@ def client():
     try:
         from google import genai
     except ImportError:
-        sys.exit("Install the Google SDK first:  pip3 install google-genai")
-    return genai.Client()
+        sys.exit("Install the Google SDK first:  pip install -U google-genai pillow")
+    api = genai.Client()
+    if not hasattr(api, "interactions"):
+        # The Interactions API (needed for Omni video) is only in recent SDKs, which need Python 3.10+.
+        sys.exit(f"Your Google SDK is too old for video (you're on Python {sys.version.split()[0]}).\n"
+                 "Set up the newer Python once (see README.md, One-time setup):\n"
+                 "  brew install python\n"
+                 "  $(brew --prefix)/bin/python3 -m venv .venv\n"
+                 "  source .venv/bin/activate\n"
+                 "  pip install -U google-genai pillow")
+    return api
 
 
 def retry(what, fn, attempts=3):

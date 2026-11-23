@@ -13,12 +13,25 @@ How it works, per exercise:
 
 ## One-time setup (on your Mac)
 
+Google's current SDK needs **Python 3.10 or newer**; the Python that comes with macOS is 3.9, which only gets an old SDK without video support. So install Homebrew's Python and give the script its own environment:
+
 ```bash
-brew install ffmpeg
-pip3 install google-genai pillow
-export GEMINI_API_KEY=your-ai-studio-key     # add this line to ~/.zshrc so it's always set
+brew install ffmpeg python
 cd ~/projects/fitness/tools/howto-videos
+$(brew --prefix)/bin/python3 -m venv .venv
+source .venv/bin/activate
+pip install -U google-genai pillow
+export GEMINI_API_KEY=your-ai-studio-key     # add this line to ~/.zshrc so it's always set
 ```
+
+Each time you open a new Terminal window to use the script:
+
+```bash
+cd ~/projects/fitness/tools/howto-videos
+source .venv/bin/activate
+```
+
+(With the environment active, `python3` below is the new Python.)
 
 Never put the key in a file in the repo.
 
