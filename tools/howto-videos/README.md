@@ -5,7 +5,7 @@ Every video ends up at the app's spec: **4:5, 1080 × 1350, 30 fps, one rep (~4 
 
 How it works, per exercise:
 
-1. **Pose** — Nano Banana (`gemini-3.1-flash-image`) draws your reference woman in the exercise's start pose, as a tall 9:16 still.
+1. **Pose** — Nano Banana (`gemini-3.1-flash-image`) draws your reference woman in the exercise's start pose, as a tall 9:16 still. The model tends to draw her top to bottom, so the script then **reframes** it: it finds her outline and shrinks her into the part of the frame the app shows clear of its buttons and title, filling in matching background around her. The original is kept as `pose-raw.jpg`.
 2. **You approve the pose** (nothing is animated until you do).
 3. **Video** — Gemini Omni Flash animates one rep, using the approved pose as both the first and the last frame, so the clip loops seamlessly. Omni only makes 9:16 or 16:9, so the script then crops the middle 4:5 out of it, trims it to one rep, removes the sound and encodes it to the spec.
 4. **You accept the video.**
@@ -15,7 +15,7 @@ How it works, per exercise:
 
 ```bash
 brew install ffmpeg
-pip3 install google-genai
+pip3 install google-genai pillow
 export GEMINI_API_KEY=your-ai-studio-key     # add this line to ~/.zshrc so it's always set
 cd ~/projects/fitness/tools/howto-videos
 ```
@@ -70,5 +70,7 @@ At the top of `generate.py`:
 - `HEAD_MIN` / `FEET_MAX`: where the figure must sit in the 9:16 frame so the crop keeps it clear of the app's buttons and title.
 - `CLIP_SECONDS`, `OUT_BITRATE`: rep length and file size.
 - Model names can be changed without editing: `HOWTO_IMAGE_MODEL=… HOWTO_VIDEO_MODEL=… python3 generate.py …`.
+
+Poses made before reframing existed, or after changing `SAFE_TOP` / `SAFE_BOTTOM` / `SAFE_SIDE`: `python3 generate.py reframe` refits them, at no API cost.
 
 Changed the crop or size settings? `python3 generate.py crop` re-crops everything already generated, at no API cost.

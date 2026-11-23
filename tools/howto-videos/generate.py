@@ -220,6 +220,74 @@ def make_video(api, ex, pose_bytes, pose_mime, dest):
         dest.write_bytes(base64.b64decode(video.data))
 
 # ---------------------------------------------------------------------------------------------
+# Reframing: the image model ignores framing instructions and draws her top to bottom, so after the
+# 4:5 crop her feet are cut off and her head is under the buttons. This finds her outline, shrinks
+# her into the safe area of the crop, and fills the space around her with matching background.
+
+# Safe area for the figure inside the final 1080 × 1350 frame (a little inside the app's limits).
+SAFE_TOP, SAFE_BOTTOM, SAFE_SIDE = 175, 250, 60
+
+
+def pillow():
+    try:
+        from PIL import Image, ImageChops, ImageDraw, ImageFilter
+        return Image, ImageChops, ImageDraw, ImageFilter
+    except ImportError:
+        sys.exit("Install Pillow first:  pip3 install pillow")
+
+
+def reframe(src_path, dest_path):
+    """Shrink and place the figure inside the app's safe area. Returns the scale used (1.0 = untouched)."""
+    Image, ImageChops, ImageDraw, ImageFilter = pillow()
+    import statistics
+    src = Image.open(src_path).convert("RGB")
+    W, H = src.size
+    px = src.load()
+
+    # Background plate: every row filled with the colour at the left and right edges of that row,
+    # which keeps the studio's top-to-bottom shading.
+    edge = max(8, W // 12)
+    plate = Image.new("RGB", (W, H))
+    for y in range(H):
+        cols = [px[x, y] for x in list(range(edge)) + list(range(W - edge, W))]
+        plate.paste(tuple(int(statistics.median(ch)) for ch in zip(*cols)), (0, y, W, y + 1))
+    plate = plate.filter(ImageFilter.GaussianBlur(6))
+
+    # The figure: whatever differs clearly from that background.
+    mask = ImageChops.difference(src, plate).convert("L").point(lambda v: 255 if v > 28 else 0)
+    bbox = mask.filter(ImageFilter.MinFilter(5)).getbbox()
+    if not bbox:
+        shutil.copy2(src_path, dest_path)
+        return 1.0
+    x0, y0, x1, y1 = bbox
+
+    # Where the figure may go in this image (the middle 4:5 band, minus the app's buttons and title).
+    band_h = W * OUT_H / OUT_W
+    band_top = (H - band_h) / 2
+    s = W / OUT_W
+    t_top, t_bot = band_top + SAFE_TOP * s, band_top + band_h - SAFE_BOTTOM * s
+    t_w = W - 2 * SAFE_SIDE * s
+    if y0 >= t_top and y1 <= t_bot and x0 >= SAFE_SIDE * s and x1 <= W - SAFE_SIDE * s:
+        shutil.copy2(src_path, dest_path) if Path(src_path).suffix == ".jpg" else src.save(dest_path, quality=95)
+        return 1.0                                      # already inside the safe area
+    scale = min(1.0, (t_bot - t_top) / (y1 - y0), t_w / (x1 - x0))
+
+    small = src.resize((round(W * scale), round(H * scale)), Image.LANCZOS)
+    ox = round(W / 2 - (x0 + x1) / 2 * scale)          # centred on her
+    oy = round(t_bot - y1 * scale)                      # feet on the bottom of the safe area
+
+    feather = max(40, W // 10)                          # soft edges so the paste blends in
+    soft = Image.new("L", small.size, 0)
+    ImageDraw.Draw(soft).rectangle([feather, feather, small.size[0] - feather, small.size[1] - feather], fill=255)
+    soft = soft.filter(ImageFilter.GaussianBlur(feather / 2))
+
+    out = plate.copy()
+    out.paste(small, (ox, oy), soft)
+    out.save(dest_path, quality=95)
+    return scale
+
+
+# ---------------------------------------------------------------------------------------------
 # ffmpeg
 
 def run(cmd):
@@ -271,6 +339,7 @@ def cmd_poses(args):
     if not REFERENCE.exists():
         sys.exit("No reference.png yet. Make one with:  python3 generate.py reference --from <video> --at <seconds>")
     exercises, ids = pick(args)
+    pillow()   # check it's installed before spending anything
     status, api = load_status(), client()
     for n, ex_id in enumerate(ids, 1):
         ex = exercises[ex_id]
@@ -284,9 +353,11 @@ def cmd_poses(args):
         data, mime = got
         folder = OUT / ex_id
         folder.mkdir(parents=True, exist_ok=True)
-        path = folder / ("pose.png" if "png" in mime else "pose.jpg")
-        path.write_bytes(data)
-        e.update(pose="ready", pose_file=str(path.relative_to(OUT)), pose_mime=mime, video="none")
+        raw = folder / ("pose-raw.png" if "png" in mime else "pose-raw.jpg")
+        raw.write_bytes(data)
+        scale = reframe(raw, folder / "pose.jpg")
+        e.update(pose="ready", pose_file=f"{ex_id}/pose.jpg", pose_mime="image/jpeg", video="none")
+        print(f"   done{'' if scale == 1.0 else f', shrunk to {scale:.0%} to fit the frame'}")
         save_status(status)
     save_status(status)
     print(f"\nOpen {(OUT / 'review.html').relative_to(REPO)} to check the poses, then approve them.")
@@ -313,7 +384,11 @@ def cmd_videos(args):
     todo = [i for i in ids if status.get(i, {}).get("pose") == "approved"
             and (args.redo or status[i].get("video") in ("none", "rejected"))]
     if not todo:
-        sys.exit("Nothing to do: approve some poses first (python3 generate.py approve <ids>).")
+        waiting = [i for i in ids if status.get(i, {}).get("pose") == "ready"]
+        if waiting:
+            sys.exit("No approved poses yet. Check out/review.html, then approve them:\n"
+                     f"  python3 generate.py approve {' '.join(waiting)}")
+        sys.exit("Nothing to do: make poses first (python3 generate.py poses), then approve them.")
     api = client()
     for n, ex_id in enumerate(todo, 1):
         ex, e, folder = exercises[ex_id], status[ex_id], OUT / ex_id
@@ -333,6 +408,23 @@ def cmd_videos(args):
         print(f"   done, {size:.2f} MB")
         save_status(status)
     print(f"\nOpen {(OUT / 'review.html').relative_to(REPO)} to watch them, then accept the good ones.")
+
+
+def cmd_reframe(args):
+    """Reframe poses you already have (no API cost)."""
+    status = load_status()
+    ids = args.ids or [i for i, e in status.items() if e.get("pose_file")]
+    for ex_id in ids:
+        folder = OUT / ex_id
+        raw = next((p for p in (folder / "pose-raw.jpg", folder / "pose-raw.png") if p.exists()), None)
+        if raw is None:   # poses made before reframing existed: keep the original as the raw one
+            old = OUT / status[ex_id]["pose_file"]
+            raw = folder / ("pose-raw" + old.suffix)
+            old.rename(raw)
+        scale = reframe(raw, folder / "pose.jpg")
+        status[ex_id].update(pose_file=f"{ex_id}/pose.jpg", pose_mime="image/jpeg")
+        print(f"   {ex_id}: {'already fits' if scale == 1.0 else f'shrunk to {scale:.0%}'}")
+    save_status(status)
 
 
 def cmd_crop(args):
@@ -421,6 +513,7 @@ def main():
         sp.set_defaults(fn=lambda a, f=field, fr=frm, t=to: set_state(a, f, fr, t))
 
     sp = sub.add_parser("videos", help="3. generate videos for approved poses"); selection(sp); sp.set_defaults(fn=cmd_videos)
+    sp = sub.add_parser("reframe", help="refit existing poses into the safe area (no API cost)"); sp.add_argument("ids", nargs="*"); sp.set_defaults(fn=cmd_reframe)
     sp = sub.add_parser("crop", help="re-crop generated videos"); sp.add_argument("ids", nargs="*"); sp.set_defaults(fn=cmd_crop)
     sp = sub.add_parser("install", help="5. copy accepted videos into the app"); sp.add_argument("ids", nargs="*"); sp.set_defaults(fn=cmd_install)
     sp = sub.add_parser("status", help="show where every exercise is"); sp.set_defaults(fn=cmd_status)
