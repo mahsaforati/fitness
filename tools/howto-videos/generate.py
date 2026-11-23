@@ -37,7 +37,7 @@ REFERENCE = HERE / "reference.png"            # your character: the same woman i
 APP_VIDEOS = REPO / "Fitness" / "HowToVideos"
 
 IMAGE_MODEL = os.environ.get("HOWTO_IMAGE_MODEL", "gemini-3.1-flash-image")   # Nano Banana 2
-VIDEO_MODEL = os.environ.get("HOWTO_VIDEO_MODEL", "gemini-omni-1.1-flash")    # Gemini Omni Flash
+VIDEO_MODEL = os.environ.get("HOWTO_VIDEO_MODEL", "gemini-omni-1.2-flash")    # Gemini Omni 1.2 Flash
 
 CLIP_SECONDS = 4          # one rep
 GEN_ASPECT = "9:16"       # Omni only makes 9:16 or 16:9; we crop to 4:5 afterwards
